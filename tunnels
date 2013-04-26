@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+scriptDir="$(dirname "$BASH_SOURCE")"
+
+if [ "$UID" -ne 0 ]; then
+	if which sudo &> /dev/null; then
+		exec sudo "$0" "$@"
+	fi
+	echo 'Run me as root.'
+	exit 1
+fi
+
+export PYTHONPATH="$scriptDir/src:$PYTHONPATH"
+exec python2 -m tunnels "$@"
