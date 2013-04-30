@@ -3,6 +3,7 @@ import select as _select
 import threading as _threading
 from .iptables import addRedirect as _addRedirect
 from .iptables import removeRedirect as _removeRedirect
+from .mapper import hasSocketThread as _hasSocketThread
 from .mapper import registerSocketThread as _registerSocketThread
 from .tunnels import config as _config
 from .tunnels import getTCPProxies as _getTCPProxies
@@ -84,11 +85,12 @@ class _SocketThread(_threading.Thread):
 		self._dead = True
 
 def spawn(domain, bindAddress):
-	tcpProxies = _getTCPProxies(domain)
-	udpProxies = _getUDPProxies(domain)
-	if tcpProxies is not None or udpProxies is not None:
-		info('Spawning server on', bindAddress, 'for', domain)
-		_SocketThread(domain, bindAddress, tcpProxies, udpProxies)
+	if not _hasSocketThread(domain):
+		tcpProxies = _getTCPProxies(domain)
+		udpProxies = _getUDPProxies(domain)
+		if tcpProxies is not None or udpProxies is not None:
+			info('Spawning server on', bindAddress, 'for', domain)
+			_SocketThread(domain, bindAddress, tcpProxies, udpProxies)
 
 _temporaryPortRange = None
 

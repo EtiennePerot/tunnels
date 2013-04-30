@@ -42,6 +42,9 @@ class _Mapper(_threading.Thread):
 	def registerSocketThread(self, domain, socketThread):
 		with self._lock:
 			self._socketThreads[domain] = socketThread
+	def hasSocketThread(self, domain):
+		with self._lock:
+			return domain in self._socketThreads
 	def _cleanup(self):
 		with self._lock:
 			cleanupThreshold = _time.time() - self._cleanupTime
@@ -70,13 +73,15 @@ getRawIp = lambda x: None
 getIp = lambda x: None
 getDomain = lambda x: None
 registerSocketThread = lambda x: None
+hasSocketThread = lambda x: None
 def init():
-	global _mapper, getRawIp, getIp, getDomain, registerSocketThread
+	global _mapper, getRawIp, getIp, getDomain, registerSocketThread, hasSocketThread
 	_mapper = _Mapper()
 	getRawIp = _mapper.getRawIp
 	getIp = _mapper.getIp
 	getDomain = _mapper.getDomain
 	registerSocketThread = _mapper.registerSocketThread
+	hasSocketThread = _mapper.hasSocketThread
 
 def deinit():
 	_mapper.kill()

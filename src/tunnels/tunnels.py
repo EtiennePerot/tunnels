@@ -124,6 +124,11 @@ _defaultMainConfig = {
 	'addressCleanupTime': 3600,
 	'dnsBindAddress': u'127.0.0.1',
 	'dnsPort': 53,
+	'overwriteResolvconf': True,
+	'restoreResolvConf': True,
+	'makeResolvconfImmutable': True,
+	'resolvconfPath': u'/etc/resolv.conf',
+	'resolvconfBackupPath': u'/etc/resolv.conf.tunnels-backup',
 	'dnsPacketSize': 65535,
 	'upstreamDnsTimeout': 300,
 	'temporaryBindPortRange': u'30000-55000',
@@ -141,6 +146,8 @@ def main(confDir):
 	getUDPProxies = _tunnelsConfig.getUDPProxies
 	# Take care of the config
 	import os
+	import shutil
+	import subprocess
 	import sys
 	import time
 	import yaml
@@ -202,7 +209,22 @@ def main(confDir):
 	iptablesInit()
 	from .logger import startLog, info
 	startLog()
-	info(u'Started.')
+	if config('overwriteResolvconf'):
+		shutil.copy2(config('resolvconfPath'), config('resolvconfBackupPath'))
+		f = open(config('resolvconfPath'), 'w')
+		f.write('nameserver ' + config('dnsBindAddress'))
+		f.close()
+		info(u'Your resolv.conf file', config('resolvconfPath'), u'has been modified to point to Tunnels.')
+		if config('makeResolvconfImmutable'):
+			subprocess.check_output(['chattr', '+i', config('resolvconfPath')])
+			info(u'It has also been made immutable (chattr +i).')
+		if config('restoreResolvConf'):
+			info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'and will be restored on exit.')
+		else:
+			info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'but will NOT be restored on exit.')
+	info(u'Tunnels operational.')
+	info(u'Make sure to point your DNS settings to it.')
+	info(u'Remember that data lingering in the DNS cache may make some domains not go through Tunnels until the TTL expires.')
 	try:
 		while 8:
 			time.sleep(3600)
@@ -210,3 +232,9 @@ def main(confDir):
 		pass
 	mapperDeinit()
 	iptablesDeinit()
+	if config('overwriteResolvconf') and config('restoreResolvConf'):
+		if config('makeResolvconfImmutable'):
+			subprocess.check_output(['chattr', '-i', config('resolvconfPath')])
+		shutil.copy2(config('resolvconfBackupPath'), config('resolvconfPath'))
+		os.remove(config('resolvconfBackupPath'))
+		info(u'Your resolv.conf file', config('resolvconfPath'), u'has been restored from the backup at', config('resolvconfBackupPath'))

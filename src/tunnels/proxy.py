@@ -3,7 +3,7 @@ import threading as _threading
 import time as _time
 
 from .confsys import Configurable as _Configurable
-from .logger import info as _info
+from .logger import warn as _warn
 
 _definedProxyClasses = {}
 class _ProxyMetaclass(type):
