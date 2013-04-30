@@ -42,4 +42,6 @@ def mkProxy(proxyName, proxyConfig):
 		proxyClass._proxyConfig = proxyDefaultConfig
 		proxyClass._proxyConfigRequired = proxyConfigRequired
 		_proxies[proxy] = proxyClass
-	return _proxies[proxy](proxyName, proxyConfig)
+	proxy = _proxies[proxy](proxyName, proxyConfig)
+	proxy.onRegister()
+	return proxy

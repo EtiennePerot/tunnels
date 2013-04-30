@@ -1,7 +1,9 @@
 import asyncore as _asyncore
 import threading as _threading
+import time as _time
 
 from .confsys import Configurable as _Configurable
+from .logger import info as _info
 
 _definedProxyClasses = {}
 class _ProxyMetaclass(type):
@@ -35,6 +37,7 @@ class ProxyThread(_threading.Thread):
 		return self._alive
 	def close(self): # Overriddable
 		self._alive = False
+		self._parentProxy.notifyProxyClosed(self)
 	def run(self): # Overriddable
 		pass
 
@@ -55,10 +58,13 @@ class ForwarderProxyThread(ProxyThread):
 		self._asyncOutgoing.writable = self._outgoingWritable
 		self._asyncOutgoing.handle_close = self._handleClose
 		self._readSize = self._getReadSize()
+		self._buffered = self._isBuffered()
 	def _incomingRead(self):
 		read = self._asyncIncoming.recv(self._readSize)
 		if read:
 			self._incomingBuffer += read
+			if not self._buffered:
+				self._asyncOutgoing.sendall(read)
 	def _incomingWrite(self):
 		sent = self._asyncIncoming.send(self._outgoingBuffer)
 		if sent:
@@ -69,6 +75,8 @@ class ForwarderProxyThread(ProxyThread):
 		read = self._asyncOutgoing.recv(self._readSize)
 		if read:
 			self._outgoingBuffer += read
+			if not self._buffered:
+				self._asyncIncoming.sendall(read)
 	def _outgoingWrite(self):
 		sent = self._asyncOutgoing.send(self._incomingBuffer)
 		if sent:
@@ -89,6 +97,8 @@ class ForwarderProxyThread(ProxyThread):
 		_asyncore.loop(map=self._asyncSockets)
 	def _getReadSize(self): # Overriddable
 		return 655365
+	def _isBuffered(self): # Overriddable
+		return True
 	def _mkOutgoingSocket(self): # Overriddable
 		raise NotImplementedError()
 
@@ -118,3 +128,66 @@ class Proxy(_Configurable):
 		raise NotImplementedError()
 	def _getUDPThreadClass(self): # Overriddable
 		raise NotImplementedError()
+	def onRegister(self): # Overriddable
+		pass
+	def notifyProxyClosed(self, proxyThread): # Overriddable
+		pass
+
+class MultiplexingProxy(Proxy):
+	class Error(Exception):
+		pass
+	def __init__(self, *args, **kwargs):
+		Proxy.__init__(self, *args, **kwargs)
+		self._lock = _threading.RLock()
+		self._socket = None
+		self._activeCount = 0
+	def onRegister(self):
+		Proxy.onRegister(self)
+		with self._lock:
+			if self._getKeepalivePolicy(): # Connect right away
+				self._socket = self._mkSocket()
+				if self._socket is None:
+					raise SystemError('Could not establish connection.')
+	def _getKeepalivePolicy(self): # Overriddable
+		raise NotImplementedError()
+	def _mkSocket(self): # Overriddable
+		raise NotImplementedError()
+	def _disconnectSocket(self): # Overriddable
+		self._socket.close()
+	def _autoReconnectSleep(self): # Overriddable
+		return 5
+	def _mkSocketLoop(self):
+		socket = None
+		while socket is None:
+			try:
+				socket = self._mkSocket()
+			except MultiplexingProxy.Error as e:
+				_warn(e)
+			if socket is None:
+				_time.sleep(self._autoReconnectSleep())
+		return socket
+	def acquireSocket(self):
+		with self._lock:
+			self._activeCount = 0
+			self._socket = self._mkSocketLoop()
+			self._activeCount += 1
+			return self._socket
+	def socketBroken(self):
+		with self._lock:
+			try:
+				self._disconnectSocket()
+			except:
+				pass
+			self._socket = None
+			self._activeCount = 0
+			if self._getKeepalivePolicy():
+				_time.sleep(self._autoReconnectSleep())
+				self._socket = self._mkSocketLoop()
+	def notifyProxyClosed(self, proxyThread):
+		Proxy.notifyProxyClosed(self, proxyThread)
+		with self._lock:
+			self._activeCount -= 1
+			if self._activeCount < 1 and not self._getKeepalivePolicy():
+				self._disconnectSocket()
+				self._socket = None
+				self._activeCount = 0
