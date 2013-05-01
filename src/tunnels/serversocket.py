@@ -8,10 +8,12 @@ from .mapper import registerSocketThread as _registerSocketThread
 from .tunnels import config as _config
 from .tunnels import getTCPProxies as _getTCPProxies
 from .tunnels import getUDPProxies as _getUDPProxies
-from .logger import *
+
+from .logger import mkInfoFunction as _mkInfoFunction
+_srvInfo = _mkInfoFunction('SRV')
 
 import socket as _socket
-try:
+try: # Monkeypatch _socket.IP_TRANSPARENT
 	_socket.IP_TRANSPARENT
 except AttributeError:
 	_socket.IP_TRANSPARENT = 19 # http://bugs.python.org/issue12809
@@ -52,7 +54,7 @@ class _SocketThread(_threading.Thread):
 					continue
 				break
 			self._tcpActualPorts[tempPort] = tcpPort
-			info('Bound TCP socket to', (bindAddress, tempPort), 'for', domain, 'port', tcpPort)
+			_srvInfo('Bound TCP socket to', (bindAddress, tempPort), 'for', domain, 'port', tcpPort)
 			socket.listen(tcpListenQueue)
 			self._sockets.append(socket)
 		_threading.Thread.__init__(self)
@@ -70,8 +72,9 @@ class _SocketThread(_threading.Thread):
 				connection = socket.accept()[0]
 				tcpPort = self._tcpActualPorts[connection.getsockname()[1]]
 				proxy = self._tcpProxies[tcpPort]
-				info('Spawning proxy', proxy, 'towards', self._domain, 'port', tcpPort, 'for peer', connection.getpeername())
+				_srvInfo('Spawning proxy', proxy, 'towards', self._domain, 'port', tcpPort, 'for peer', connection.getpeername())
 				proxy.spawnTCP(self._domain, tcpPort, connection)
+		_srvInfo('Closing proxies for', self._domain, 'for TCP ports', self._tcpActualPorts.values(), 'and UDP ports', self._udpActualPorts.values(), '- Existing TCP connections will keep working.')
 		for socket in self._sockets:
 			try:
 				socket.close()
@@ -89,7 +92,7 @@ def spawn(domain, bindAddress):
 		tcpProxies = _getTCPProxies(domain)
 		udpProxies = _getUDPProxies(domain)
 		if tcpProxies is not None or udpProxies is not None:
-			info('Spawning server on', bindAddress, 'for', domain)
+			_srvInfo('Spawning server on', bindAddress, 'for', domain)
 			_SocketThread(domain, bindAddress, tcpProxies, udpProxies)
 
 _temporaryPortRange = None

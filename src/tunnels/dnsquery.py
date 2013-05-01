@@ -25,6 +25,13 @@ class DNSQuery(object):
 		return self._domain
 	def isIPv6(self):
 		return self._ipv6
+	def getQueryType(self):
+		if self._ipv6:
+			return u'AAAA'
+		elif self._ipv6 is False:
+			return u'A'
+		else:
+			return u'(other)'
 	def buildResponsePacket(self, ip, ttl):
 		if self._ipv6 is None or self._domain is None:
 			return b''

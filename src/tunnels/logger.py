@@ -1,4 +1,5 @@
 import logging as _logging
+import time as _time
 import traceback as _traceback
 import threading as _threading
 try:
@@ -10,6 +11,7 @@ _logging.basicConfig()
 _localLogger = _logging.getLogger(u'tunnels')
 _localLogger.setLevel(_logging.INFO)
 _logQueue = _queue.Queue()
+_silencedModules = []
 
 class _logThread(_threading.Thread):
 	def __init__(self):
@@ -23,11 +25,17 @@ class _logThread(_threading.Thread):
 		except BaseException: # Weird errors may occur when shutting down the system and the logger is destroyed
 			pass
 
-def startLog():
+def startLog(silencedModules=[]):
+	global _silencedModules
+	_silencedModules = silencedModules
 	_logThread().start()
 
 def _log(level, *msg, **kwargs):
 	newMsg = []
+	if 'module' in kwargs:
+		if kwargs['module'] in _silencedModules:
+			return
+		newMsg.append(u'[' + kwargs['module'] + u']')
 	for m in msg:
 		if type(m) is type(u''):
 			newMsg.append(m)
@@ -44,6 +52,10 @@ def _log(level, *msg, **kwargs):
 			newMsg.append(str(m))
 	_logQueue.put((level, u' '.join(newMsg)))
 
+def deinit():
+	while not _logQueue.empty():
+		_time.sleep(.05)
+
 def info(*msg, **kwargs):
 	return _log(_logging.INFO, *msg, **kwargs)
 
@@ -52,3 +64,16 @@ def warn(*msg, **kwargs):
 
 def error(*msg, **kwargs):
 	return _log(_logging.ERROR, *msg, **kwargs)
+
+def _mkLogFunction(baseFunction):
+	def logCreationFunction(moduleName):
+		moduleName = moduleName.upper()
+		def infoFunction(*args, **kwargs):
+			kwargs['module'] = moduleName
+			return baseFunction(*args, **kwargs)
+		return infoFunction
+	return logCreationFunction
+
+mkInfoFunction = _mkLogFunction(info)
+mkWarnFunction = _mkLogFunction(warn)
+mkErrorFunction = _mkLogFunction(error)

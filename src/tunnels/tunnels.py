@@ -83,6 +83,7 @@ class _TunnelsConfig(object):
 class _PortsConfig(object):
 	_plusSeparatedSplit = _re.compile(u'\\s*\\+[+\\s]*')
 	_numericalPort = _re.compile(u'[ut]\\d+')
+	_allNumbers = _re.compile('\\d+')
 	def __init__(self):
 		self._ports = {}
 	def add(self, name, value):
@@ -92,7 +93,14 @@ class _PortsConfig(object):
 	def get(self, ports):
 		finalList = []
 		for port in _PortsConfig._plusSeparatedSplit.split(ports):
-			finalList.extend(self._ports[port])
+			if _PortsConfig._numericalPort.match(port):
+				finalList.append(port)
+			elif port in self._ports:
+				finalList.extend(self._ports[port])
+			elif _PortsConfig._allNumbers.match(port):
+				raise ValueError(u'Invalid port number "' + port + u'"; did you mean "t' + port + u'" (TCP port ' + port + u') or "u' + port + u'" (UDP port ' + port + u')?')
+			else:
+				raise ValueError(u'Invalid port name "' + port + u'".')
 		return finalList
 	def expandAll(self):
 		for portName in self._ports:
@@ -121,7 +129,7 @@ def config(key):
 
 _defaultMainConfig = {
 	'privateAddresses': u'10.42.0.0/16',
-	'addressCleanupTime': 3600,
+	'addressCleanupTime': 60,
 	'dnsBindAddress': u'127.0.0.1',
 	'dnsPort': 53,
 	'overwriteResolvconf': True,
@@ -132,7 +140,8 @@ _defaultMainConfig = {
 	'dnsPacketSize': 65535,
 	'upstreamDnsTimeout': 300,
 	'temporaryBindPortRange': u'30000-55000',
-	'iptablesChain': u'tunnels_redirects'
+	'iptablesChain': u'tunnels_redirects',
+	'silentLog': 'DNS'
 }
 _requiredMainConfig = ['upstreamDns']
 
@@ -182,6 +191,8 @@ def main(confDir):
 				for ruleHosts, ruleProxy in value.items():
 					allRules.append((ruleHosts, ruleProxy))
 			else:
+				if key in _config:
+					raise ValueError('Duplicate configuration entry for "' + key + '"')
 				_config[key] = value
 	# Expand ports
 	portsConfig.expandAll()
@@ -208,7 +219,8 @@ def main(confDir):
 	from .iptables import deinit as iptablesDeinit
 	iptablesInit()
 	from .logger import startLog, info
-	startLog()
+	from .logger import deinit as logDeinit
+	startLog(silencedModules=commaSeparatedSplit.split(config('silentLog')))
 	if config('overwriteResolvconf'):
 		shutil.copy2(config('resolvconfPath'), config('resolvconfBackupPath'))
 		f = open(config('resolvconfPath'), 'w')
@@ -229,7 +241,7 @@ def main(confDir):
 		while 8:
 			time.sleep(3600)
 	except KeyboardInterrupt:
-		pass
+		print('\rInterrupted, shutting down.')
 	mapperDeinit()
 	iptablesDeinit()
 	if config('overwriteResolvconf') and config('restoreResolvConf'):
@@ -238,3 +250,4 @@ def main(confDir):
 		shutil.copy2(config('resolvconfBackupPath'), config('resolvconfPath'))
 		os.remove(config('resolvconfBackupPath'))
 		info(u'Your resolv.conf file', config('resolvconfPath'), u'has been restored from the backup at', config('resolvconfBackupPath'))
+	logDeinit()

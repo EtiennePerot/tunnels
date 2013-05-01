@@ -1,9 +1,11 @@
 import os as _os
 import socket as _socket
-from tunnels.logger import info as _info
 from tunnels.proxy import MultiplexingProxy as _MultiplexingProxy
 from tunnels.proxy import ForwarderProxyThread as _ForwarderProxyThread
 import paramiko as _paramiko
+
+from tunnels.logger import mkInfoFunction as _mkInfoFunction
+_sshInfo = _mkInfoFunction('SSH-Proxy')
 
 class SSHProxyThread(_ForwarderProxyThread):
 	def _mkOutgoingSocket(self):
@@ -12,7 +14,7 @@ class SSHProxyThread(_ForwarderProxyThread):
 			self._sshChannel = transport.open_channel('direct-tcpip', self.getDestination(), ('', 0))
 			return self._sshChannel
 		except BaseException as e:
-			_info('Could not connect to', self.getDestination(), '(perhaps server doesn\'t allow TCP channels, or destination is unreachable)', e)
+			_sshInfo('Could not connect to', self.getDestination(), '(perhaps server doesn\'t allow TCP channels, or destination is unreachable)', e)
 	def _isBuffered(self):
 		return False
 	def close(self):
@@ -44,7 +46,7 @@ class SSHProxy(_MultiplexingProxy):
 	def _getKeepalivePolicy(self):
 		return self._keepAlive
 	def _mkSocket(self):
-		_info('Connecting to SSH server', (self._proxyAddress, self._proxyPort))
+		_sshInfo('Connecting to SSH server', (self._proxyAddress, self._proxyPort))
 		socket = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
 		try:
 			socket.connect((self._proxyAddress, self._proxyPort))
@@ -67,7 +69,7 @@ class SSHProxy(_MultiplexingProxy):
 			raise _MultiplexingProxy.Error('Could not log in to the SSH server.', e)
 		return transport
 	def _disconnectSocket(self):
-		_info('Disconnecting from SSH server', (self._proxyAddress, self._proxyPort))
+		_sshInfo('Disconnecting from SSH server', (self._proxyAddress, self._proxyPort))
 		_MultiplexingProxy._disconnectSocket(self)
 	def _prettyFingerprint(self, fingerprint):
 		if fingerprint is None:

@@ -5,10 +5,12 @@ import threading as _threading
 from .dnsquery import DNSQuery as _DNSQuery
 from .mapper import getRawIp as _getRawIp
 from .mapper import convertIp as _convertIp
-from .logger import info as _info
 from .serversocket import spawn as _spawnServer
 from .tunnels import config as _config
 from .tunnels import hasPolicy as _hasPolicy
+
+from .logger import mkInfoFunction as _mkInfoFunction
+_dnsInfo = _mkInfoFunction('DNS')
 
 class _DNSServer(_threading.Thread):
 	def __init__(self):
@@ -62,17 +64,16 @@ class _DNSServer(_threading.Thread):
 						dnsSocket.sendto(data, self._upstreamDns)
 						socketMap[dnsSocket] = address # Save return address
 						socketList.append(dnsSocket) # Add to socket select() list
-						_info('DNS server got queried for', domain, '- Forwarded to upstream DNS server', self._upstreamDns, 'from local port', tempPort)
+						_dnsInfo('DNS server got', query.getQueryType(), 'query for', domain, '- Forwarded to upstream DNS server', self._upstreamDns, 'from local port', tempPort)
 					else:
 						data, source = socket.recvfrom(self._packetSize)
 						if source == self._upstreamDns: # Make sure the packet actually came from the upstream DNS server
-							_info('DNS server got upstream DNS reply on socket', dnsSocket.getsockname())
 							self._socket.sendto(data, socketMap[socket]) # Send it to the client from the socket that received the query originally
 							socket.close() # Close the socket to the upstream DNS server
 							socketList.remove(socket)
 							del socketMap[socket]
 						else:
-							_info('DNS server got packet on socket', dnsSocket.getsockname(), 'but it did not come from upstream DNS server; it came from', source)
+							_dnsInfo('DNS server got packet on socket', dnsSocket.getsockname(), 'but it did not come from upstream DNS server; it came from', source)
 			elif len(socketMap): # Timeout occurred and there is at least one upstream DNS request going on
 				for socket in socketList[1:]: # Close all DNS sockets
 					socket.close()
