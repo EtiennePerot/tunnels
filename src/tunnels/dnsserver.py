@@ -29,7 +29,7 @@ class _DNSServer(_threading.Thread):
 		self._upstreamDnsTimeout = int(_config('upstreamDnsTimeout'))
 		self._ttl = int(_config('addressCleanupTime') / 4)
 		self._blockUndefinedDomains = _config('blockUndefinedDomains')
-		_threading.Thread.__init__(self)
+		_threading.Thread.__init__(self, name='Tunnels DNS server thread')
 		self.daemon = True
 	def run(self):
 		readList = []

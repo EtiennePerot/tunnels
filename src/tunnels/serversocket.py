@@ -57,7 +57,7 @@ class _SocketThread(_threading.Thread):
 			_srvInfo('Bound TCP socket to', (bindAddress, tempPort), 'for', domain, 'port', tcpPort)
 			socket.listen(tcpListenQueue)
 			self._sockets.append(socket)
-		_threading.Thread.__init__(self)
+		_threading.Thread.__init__(self, name='Tunnels socket management thread')
 		self.daemon = True
 		_registerSocketThread(domain, self)
 		self.start()

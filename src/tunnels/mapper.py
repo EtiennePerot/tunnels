@@ -20,7 +20,7 @@ class _Mapper(_threading.Thread):
 		self._cleanupTime = _config('addressCleanupTime')
 		self._localRoute = _IPRoute(str(self._cidr) + u' dev lo')
 		self._localRoute.enable()
-		_threading.Thread.__init__(self)
+		_threading.Thread.__init__(self, name='Tunnels mapper cleanup thread')
 		self.daemon = True
 		self.start()
 	def getRawIp(self, domain):
