@@ -27,6 +27,8 @@ To avoid this, I recommend using a browser extension such as [RequestPolicy]. It
 
 Alternatively, you can set `blockUndefinedDomains` to `true` in the configuration, which will cause all connections to domains you have not specified rules for to fail. Be careful, however, that the application in question doesn't fall back to directly connecting to an IP address, perhaps stored as part of its code.
 
+This application also doesn't protect you against anything that ignores `/etc/resolv.conf` or otherwise makes its own DNS lookups, and the above suggestions will not help. Such applications tend to be malicious and should be run in isolated environments anyway.
+
 ## Usage
 
 	tunnels <configuration directory>
