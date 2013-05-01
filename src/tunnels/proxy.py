@@ -79,7 +79,8 @@ class ForwarderProxyThread(ProxyThread):
 		if read:
 			self._incomingBuffer += read
 			if not self._buffered:
-				self._asyncOutgoing.sendall(read)
+				while self._incomingBuffer:
+					self._outgoingWrite()
 	def _incomingWrite(self):
 		sent = self._asyncIncoming.send(self._outgoingBuffer)
 		if sent:
@@ -91,7 +92,8 @@ class ForwarderProxyThread(ProxyThread):
 		if read:
 			self._outgoingBuffer += read
 			if not self._buffered:
-				self._asyncIncoming.sendall(read)
+				while self._outgoingBuffer:
+					self._incomingWrite()
 	def _outgoingWrite(self):
 		sent = self._asyncOutgoing.send(self._incomingBuffer)
 		if sent:
@@ -181,11 +183,13 @@ class MultiplexingProxy(Proxy):
 			if socket is None:
 				_time.sleep(self._autoReconnectSleep())
 		return socket
-	def acquireSocket(self):
+	def acquireSocket(self, countAsActive=True):
 		with self._lock:
-			self._activeCount = 0
-			self._socket = self._mkSocketLoop()
-			self._activeCount += 1
+			if self._socket is None:
+				self._activeCount = 0
+				self._socket = self._mkSocketLoop()
+			if countAsActive:
+				self._activeCount += 1
 			return self._socket
 	def socketBroken(self):
 		with self._lock:

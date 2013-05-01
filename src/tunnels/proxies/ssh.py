@@ -1,5 +1,7 @@
 import os as _os
 import socket as _socket
+import threading as _threading
+import time as _time
 from tunnels.proxy import MultiplexingProxy as _MultiplexingProxy
 from tunnels.proxy import ForwarderProxyThread as _ForwarderProxyThread
 import paramiko as _paramiko
@@ -14,7 +16,7 @@ class SSHProxyThread(_ForwarderProxyThread):
 			self._sshChannel = transport.open_channel('direct-tcpip', self.getDestination(), ('', 0))
 			return self._sshChannel
 		except BaseException as e:
-			_sshInfo('Could not connect to', self.getDestination(), '(perhaps server doesn\'t allow TCP channels, or destination is unreachable)', e)
+			_sshInfo('Could not connect to', self.getDestination(), '(perhaps server doesn\'t allow TCP channels, or destination is unreachable, or SSH link has gone down)', e)
 	def _isBuffered(self):
 		return False
 	def close(self):
@@ -24,6 +26,31 @@ class SSHProxyThread(_ForwarderProxyThread):
 		except:
 			pass
 		_ForwarderProxyThread.close(self)
+
+class _SSHProxyMonitor(_threading.Thread):
+	def __init__(self, proxy, transport):
+		self._proxy = proxy
+		_threading.Thread.__init__(self, name='SSH monitor thread for ' + str(proxy))
+		self.daemon = True
+		self._alive = True
+		self._timeout = self._proxy['timeout']
+		self._channel = transport.open_channel('session')
+		self._channel.settimeout(self._timeout)
+		self._channel.invoke_shell()
+		self.start()
+	def run(self):
+		while self._alive:
+			try:
+				self._channel.send('echo hi\n')
+				if not len(self._channel.recv(4096)):
+					raise Exception()
+				_time.sleep(self._timeout)
+			except:
+				_sshInfo('Monitor thread detected broken connection for', self._proxy, '- Will reconnect in a while.')
+				self._proxy.socketBroken()
+				self._alive = False
+	def kill(self):
+		self._alive = False
 
 class SSHProxy(_MultiplexingProxy):
 	def __init__(self, name, config):
@@ -36,6 +63,8 @@ class SSHProxy(_MultiplexingProxy):
 		self._serverFingerprintECDSA = self['ecdsaFingerprint']
 		self._cipher = self['cipher']
 		self._hmac = self['hmac']
+		self._timeout = self['timeout']
+		self._monitorThread = None
 		try:
 			self._privateKey = _paramiko.ECDSAKey.from_private_key_file(self['privateKey'])
 		except:
@@ -53,7 +82,7 @@ class SSHProxy(_MultiplexingProxy):
 		except BaseException as e:
 			raise _MultiplexingProxy.Error('Could not connect to', (self._proxyAddress, self._proxyPort), e)
 		transport = _paramiko.Transport(socket)
-		transport.set_keepalive(True)
+		transport.set_keepalive(self._timeout / 4)
 		transport.get_security_options().ciphers = (self._cipher,)
 		transport.get_security_options().digests = (self._hmac,)
 		try:
@@ -67,10 +96,16 @@ class SSHProxy(_MultiplexingProxy):
 			transport.auth_publickey(self._username, self._privateKey)
 		except BaseException as e:
 			raise _MultiplexingProxy.Error('Could not log in to the SSH server.', e)
+		try:
+			self._monitorThread = _SSHProxyMonitor(self, transport)
+		except BaseException as e:
+			raise _MultiplexingProxy.Error('Could not spawn a shell on the SSH server.', e)
 		return transport
 	def _disconnectSocket(self):
 		_sshInfo('Disconnecting from SSH server', (self._proxyAddress, self._proxyPort))
 		_MultiplexingProxy._disconnectSocket(self)
+		if self._monitorThread is not None:
+			self._monitorThread.kill()
 	def _prettyFingerprint(self, fingerprint):
 		if fingerprint is None:
 			return u'None'
@@ -118,6 +153,10 @@ proxyInfo = {
 		'hmac': {
 			'default': 'hmac-sha1',
 			'description': u'The HMAC scheme to use for authentication.'
+		},
+		'timeout': {
+			'default': 30,
+			'description': 'Timeout (in seconds) of control packets to check if the connection is still active.'
 		}
 	}
 }
