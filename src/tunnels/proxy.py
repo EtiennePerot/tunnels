@@ -1,9 +1,14 @@
 import asyncore as _asyncore
+import random as _random
 import threading as _threading
 import time as _time
 
 from .confsys import Configurable as _Configurable
-from .logger import warn as _warn
+
+from .logger import mkInfoFunction as _mkInfoFunction
+from .logger import mkWarnFunction as _mkWarnFunction
+_proxyInfo = _mkInfoFunction('Proxy')
+_proxyWarn = _mkWarnFunction('Proxy')
 
 _definedProxyClasses = {}
 class _ProxyMetaclass(type):
@@ -15,17 +20,27 @@ class _ProxyMetaclass(type):
 		return builtClass
 
 class ProxyThread(_threading.Thread):
-	def __init__(self, parentProxy, domain, port, incomingSocket):
+	def __init__(self, parentProxy, rule, domain, port, incomingSocket):
 		self._parentProxy = parentProxy
+		self._rule = rule
 		self._domain = domain
 		self._port = port
 		self._incomingSocket = incomingSocket
 		self._alive = True
+		self._destinations = self._rule.getForcedAddresses()
 		_threading.Thread.__init__(self)
 		self.daemon = True
 	def getParentProxy(self):
 		return self._parentProxy
+	def getRule(self):
+		return self._rule
 	def getDomain(self):
+		if self._destinations is not None:
+			if len(self._destinations) == 1:
+				return self._destinations[0]
+			destination = _random.choice(self._destinations)
+			_proxyInfo(self, 'to', self._domain, 'picked final address', destination, 'out of the', len(self._destinations), 'choices')
+			return destination
 		return self._domain
 	def getPort(self):
 		return self._port
@@ -110,19 +125,19 @@ class Proxy(_Configurable):
 		return True
 	def supportsUDP(self): # Overriddable
 		return False
-	def spawnTCP(self, domain, tcpPort, incomingSocket):
+	def spawnTCP(self, rule, domain, tcpPort, incomingSocket):
 		if not self.supportsTCP():
 			raise SystemError(u'Cannot create a TCP connection; ' + str(self) + u' does not support TCP.')
-		return self._doSpawnTCP(domain, tcpPort, incomingSocket)
-	def spawnUDP(self, domain, udpPort, incomingSocket):
+		return self._doSpawnTCP(rule, domain, tcpPort, incomingSocket)
+	def spawnUDP(self, rule, domain, udpPort, incomingSocket):
 		if not self.supportsUDP():
 			raise SystemError(u'Cannot create a UDP connection; ' + str(self) + u' does not support UDP.')
-		return self._doSpawnUDP(domain, tcpPort, incomingSocket)
-	def _doSpawnTCP(self, domain, tcpPort, incomingSocket): # Overriddable
-		self._getTCPThreadClass()(self, domain, tcpPort, incomingSocket).start()
+		return self._doSpawnUDP(rule, domain, tcpPort, incomingSocket)
+	def _doSpawnTCP(self, rule, domain, tcpPort, incomingSocket): # Overriddable
+		self._getTCPThreadClass()(self, rule, domain, tcpPort, incomingSocket).start()
 		return True
-	def _doSpawnUDP(self, domain, udpPort, incomingSocket): # Overriddable
-		self._getUDPThreadClass()(self, domain, udpPort, incomingSocket).start()
+	def _doSpawnUDP(self, rule, domain, udpPort, incomingSocket): # Overriddable
+		self._getUDPThreadClass()(self, rule, domain, udpPort, incomingSocket).start()
 		return True
 	def _getTCPThreadClass(self): # Overriddable
 		raise NotImplementedError()
@@ -162,7 +177,7 @@ class MultiplexingProxy(Proxy):
 			try:
 				socket = self._mkSocket()
 			except MultiplexingProxy.Error as e:
-				_warn(e)
+				_proxyWarn(e)
 			if socket is None:
 				_time.sleep(self._autoReconnectSleep())
 		return socket

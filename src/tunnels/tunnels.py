@@ -1,5 +1,4 @@
 import itertools as _itertools
-import os as _os
 import re as _re
 from .confsys import Config as _Config
 from .confsys import Configurable as _Configurable
@@ -16,29 +15,30 @@ class _TunnelsConfig(object):
 		if name in self._proxies:
 			raise ValueError(u'Duplicate proxy name: "' + name + u'"')
 		self._proxies[name] = proxy
-	def addRule(self, domain, port, proxy):
+	def addRule(self, domain, port, rule):
 		"""
 		- domain: The domain or domain pattern to match
 		- port: u'tXXXX' for TCP, u'uXXXX' for UDP
-		- proxy: Name of the proxy to use
+		- rule: The _TunnelRule instance
 		"""
 		if domain[0] == u'.':
-			self.addRule(domain[1:], port, proxy)
-			self.addRule(u'*' + domain, port, proxy)
+			self.addRule(domain[1:], port, rule)
+			self.addRule(u'*' + domain, port, rule)
 			return
-		if proxy not in self._proxies:
-			raise ValueError(u'Undefined proxy: "' + proxy + u'"')
-		proxyObject = self._proxies[proxy]
+		if rule['proxy'] not in self._proxies:
+			raise ValueError(u'Undefined proxy: "' + rule['proxy'] + u'"')
+		proxyObject = self._proxies[rule['proxy']]
+		rule.setProxy(proxyObject)
 		d = None
 		e = None
 		if port[0] == u't':
 			if not proxyObject.supportsTCP():
-				raise ValueError(u'Proxy "' + proxy + u'" does not support TCP.')
+				raise ValueError(u'Proxy "' + rule['proxy'] + u'" does not support TCP.')
 			d = self._tcpDomains
 			e = self._tcpExtraMatches
 		elif port[0] == u'u':
 			if not proxyObject.supportsUDP():
-				raise ValueError(u'Proxy "' + proxy + u'" does not support UDP.')
+				raise ValueError(u'Proxy "' + rule['proxy'] + u'" does not support UDP.')
 			d = self._udpDomains
 			e = self._udpExtraMatches
 		else:
@@ -51,7 +51,7 @@ class _TunnelsConfig(object):
 		if domain not in d:
 			d[domain] = {}
 		if port not in d[domain]:
-			d[domain][port] = proxyObject
+			d[domain][port] = rule
 		else:
 			raise ValueError(u'Duplicate configuration for "' + domain + u':' + str(port) + u'"')
 	def _addRegexDomain(self, extraMatches, domain):
@@ -62,7 +62,7 @@ class _TunnelsConfig(object):
 		regex = _re.compile(regex)
 		extraMatches[domainKey] = regex
 		return domainKey
-	def _getProxies(self, d, e, domain):
+	def _getConfigs(self, d, e, domain):
 		if domain not in d:
 			originalDomain = domain
 			while u'.' in domain[1:] and domain not in d:
@@ -74,11 +74,32 @@ class _TunnelsConfig(object):
 				return d.get(u'', None) # Everything failed, so return default if it is defined, otherwise return empty
 		return d[domain]
 	def hasPolicy(self, domain):
-		return self.getTCPProxies(domain) is not None or self.getUDPProxies(domain) is not None
-	def getTCPProxies(self, domain):
-		return self._getProxies(self._tcpDomains, self._tcpExtraMatches, domain)
-	def getUDPProxies(self, domain):
-		return self._getProxies(self._udpDomains, self._udpExtraMatches, domain)
+		return self.getTCPRules(domain) is not None or self.getUDPRules(domain) is not None
+	def getTCPRules(self, domain):
+		return self._getConfigs(self._tcpDomains, self._tcpExtraMatches, domain)
+	def getUDPRules(self, domain):
+		return self._getConfigs(self._udpDomains, self._udpExtraMatches, domain)
+
+_commaSeparatedSplit = _re.compile(u'\\s*,[,\\s]*')
+
+class _TunnelRule(_Configurable):
+	_tunnelRuleConfig = {
+		'forcedAddress': None,
+		'resolution': None
+	}
+	_tunnelRuleRequired = ['proxy']
+	def __init__(self, name, config):
+		_Configurable.__init__(self, name, config, _TunnelRule._tunnelRuleConfig, _TunnelRule._tunnelRuleRequired)
+		self._forcedAddresses = None
+		if self['forcedAddress'] is not None:
+			self._forcedAddresses = _commaSeparatedSplit.split(self['forcedAddress'])
+		self._proxyObject = None
+	def getForcedAddresses(self):
+		return self._forcedAddresses
+	def setProxy(self, proxyObject):
+		self._proxyObject = proxyObject
+	def getProxy(self):
+		return self._proxyObject
 
 class _PortsConfig(object):
 	_plusSeparatedSplit = _re.compile(u'\\s*\\+[+\\s]*')
@@ -120,8 +141,8 @@ class _PortsConfig(object):
 
 _tunnelsConfig = None
 hasPolicy = lambda *args: None
-getTCPProxies = lambda *args: None
-getUDPProxies = lambda *args: None
+getTCPRules = lambda *args: None
+getUDPRules = lambda *args: None
 
 _config = None
 def config(key):
@@ -129,7 +150,7 @@ def config(key):
 
 _defaultMainConfig = {
 	'privateAddresses': u'10.42.0.0/16',
-	'addressCleanupTime': 60,
+	'addressCleanupTime': 3600,
 	'dnsBindAddress': u'127.0.0.1',
 	'dnsPort': 53,
 	'overwriteResolvconf': True,
@@ -147,13 +168,13 @@ _defaultMainConfig = {
 _requiredMainConfig = ['upstreamDns']
 
 def main(confDir):
-	global _config, _tunnelsConfig, hasPolicy, getTCPProxies, getUDPProxies
+	global _config, _tunnelsConfig, hasPolicy, getTCPRules, getUDPRules
 	# Basic init
 	_config = {}
 	_tunnelsConfig = _TunnelsConfig()
 	hasPolicy = _tunnelsConfig.hasPolicy
-	getTCPProxies = _tunnelsConfig.getTCPProxies
-	getUDPProxies = _tunnelsConfig.getUDPProxies
+	getTCPRules = _tunnelsConfig.getTCPRules
+	getUDPRules = _tunnelsConfig.getUDPRules
 	# Take care of the config
 	import os
 	import shutil
@@ -189,8 +210,8 @@ def main(confDir):
 				for proxyName, proxyConfig in value.items():
 					_tunnelsConfig.addProxy(proxyName, mkProxy(proxyName, proxyConfig))
 			elif key == u'rules':
-				for ruleHosts, ruleProxy in value.items():
-					allRules.append((ruleHosts, ruleProxy))
+				for ruleHosts, ruleConfig in value.items():
+					allRules.append((ruleHosts, ruleConfig))
 			else:
 				if key in _config:
 					raise ValueError('Duplicate configuration entry for "' + key + '"')
@@ -198,14 +219,18 @@ def main(confDir):
 	# Expand ports
 	portsConfig.expandAll()
 	# Process rules
-	commaSeparatedSplit = _re.compile(u'\\s*,[,\\s]*')
-	for ruleHosts, ruleProxy in allRules:
-		for ruleHost in commaSeparatedSplit.split(ruleHosts):
+	for ruleHosts, ruleConfig in allRules:
+		if type(ruleConfig) is not type({}):
+			ruleConfig = {
+				'proxy': ruleConfig
+			}
+		rule = _TunnelRule(ruleHosts, ruleConfig)
+		for ruleHost in _commaSeparatedSplit.split(ruleHosts):
 			if u'@' not in ruleHost:
 				raise ValueError('The rule for domain "' + ruleHost + u'" does not specify a port.')
 			ruleHost, rulePorts = ruleHost.split(u'@')
 			for rulePort in portsConfig.get(rulePorts):
-				_tunnelsConfig.addRule(ruleHost, rulePort, ruleProxy)
+				_tunnelsConfig.addRule(ruleHost, rulePort, rule)
 	# Wrap config object
 	_config = _Configurable(u'main config', _config, _defaultMainConfig, _requiredMainConfig)
 	# If we get here without an exception, then the config is probably fine. Launch the torpedoes or something.
@@ -221,8 +246,10 @@ def main(confDir):
 	iptablesInit()
 	from .logger import startLog, info
 	from .logger import deinit as logDeinit
-	startLog(silencedModules=commaSeparatedSplit.split(config('silentLog').upper()))
+	startLog(silencedModules=_commaSeparatedSplit.split(config('silentLog')))
 	if config('overwriteResolvconf'):
+		if not os.path.isfile(config('resolvconfPath')):
+			raise ValueError('No resolv.conf file found at "' + config('resolvconfPath') + '", but overwriteResolvconf is enabled.')
 		shutil.copy2(config('resolvconfPath'), config('resolvconfBackupPath'))
 		f = open(config('resolvconfPath'), 'w')
 		f.write('nameserver ' + config('dnsBindAddress'))

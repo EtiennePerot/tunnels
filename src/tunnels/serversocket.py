@@ -6,8 +6,8 @@ from .iptables import removeRedirect as _removeRedirect
 from .mapper import hasSocketThread as _hasSocketThread
 from .mapper import registerSocketThread as _registerSocketThread
 from .tunnels import config as _config
-from .tunnels import getTCPProxies as _getTCPProxies
-from .tunnels import getUDPProxies as _getUDPProxies
+from .tunnels import getTCPRules as _getTCPRules
+from .tunnels import getUDPRules as _getUDPRules
 
 from .logger import mkInfoFunction as _mkInfoFunction
 _srvInfo = _mkInfoFunction('SRV')
@@ -19,17 +19,17 @@ except AttributeError:
 	_socket.IP_TRANSPARENT = 19 # http://bugs.python.org/issue12809
 
 class _SocketThread(_threading.Thread):
-	def __init__(self, domain, bindAddress, tcpProxies={}, udpProxies={}, packetSize=65535, tcpListenQueue=16, timeout=60):
+	def __init__(self, domain, bindAddress, tcpRules={}, udpRules={}, packetSize=65535, tcpListenQueue=16, timeout=60):
 		self._bindAddress = bindAddress
 		self._sockets = []
-		self._tcpProxies = tcpProxies
-		self._udpProxies = udpProxies
+		self._tcpRules = tcpRules
+		self._udpRules = udpRules
 		self._tcpActualPorts = {}
 		self._udpActualPorts = {}
 		self._domain = domain
 		self._timeout = timeout
 		self._dead = False
-		for tcpPort, tcpProxy in tcpProxies.items():
+		for tcpPort in tcpRules:
 			socket = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
 			socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
 			socket.setsockopt(_socket.SOL_IP, _socket.IP_TRANSPARENT, 1)
@@ -71,9 +71,9 @@ class _SocketThread(_threading.Thread):
 				# TODO Don't assume 'socket' is a TCP socket
 				connection = socket.accept()[0]
 				tcpPort = self._tcpActualPorts[connection.getsockname()[1]]
-				proxy = self._tcpProxies[tcpPort]
-				_srvInfo('Spawning proxy', proxy, 'towards', self._domain, 'port', tcpPort, 'for peer', connection.getpeername())
-				proxy.spawnTCP(self._domain, tcpPort, connection)
+				rule = self._tcpRules[tcpPort]
+				_srvInfo('Spawning proxy', rule.getProxy(), 'towards', self._domain, 'port', tcpPort, 'for peer', connection.getpeername())
+				rule.getProxy().spawnTCP(rule, self._domain, tcpPort, connection)
 		_srvInfo('Closing proxies for', self._domain, 'for TCP ports', self._tcpActualPorts.values(), 'and UDP ports', self._udpActualPorts.values(), '- Existing TCP connections will keep working.')
 		for socket in self._sockets:
 			try:
@@ -89,11 +89,11 @@ class _SocketThread(_threading.Thread):
 
 def spawn(domain, bindAddress):
 	if not _hasSocketThread(domain):
-		tcpProxies = _getTCPProxies(domain)
-		udpProxies = _getUDPProxies(domain)
-		if tcpProxies is not None or udpProxies is not None:
+		tcpRules = _getTCPRules(domain)
+		udpRules = _getUDPRules(domain)
+		if tcpRules is not None or udpRules is not None:
 			_srvInfo('Spawning server on', bindAddress, 'for', domain)
-			_SocketThread(domain, bindAddress, tcpProxies, udpProxies)
+			_SocketThread(domain, bindAddress, tcpRules, udpRules)
 
 _temporaryPortRange = None
 

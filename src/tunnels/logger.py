@@ -27,13 +27,13 @@ class _logThread(_threading.Thread):
 
 def startLog(silencedModules=[]):
 	global _silencedModules
-	_silencedModules = silencedModules
+	_silencedModules = [x.lower() for x in silencedModules]
 	_logThread().start()
 
 def _log(level, *msg, **kwargs):
 	newMsg = []
 	if 'module' in kwargs:
-		if kwargs['module'] in _silencedModules:
+		if kwargs['module'].lower() in _silencedModules:
 			return
 		newMsg.append(u'[' + kwargs['module'] + u']')
 	for m in msg:
@@ -67,7 +67,7 @@ def error(*msg, **kwargs):
 
 def _mkLogFunction(baseFunction):
 	def logCreationFunction(moduleName):
-		moduleName = moduleName.upper()
+		moduleName = moduleName
 		def infoFunction(*args, **kwargs):
 			kwargs['module'] = moduleName
 			return baseFunction(*args, **kwargs)
