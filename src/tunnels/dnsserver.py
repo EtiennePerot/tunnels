@@ -13,6 +13,7 @@ from .logger import mkInfoFunction as _mkInfoFunction
 _dnsInfo = _mkInfoFunction('DNS')
 
 class _DNSServer(_threading.Thread):
+	nullroutedDomain = u'tunnels.nullroute.null'
 	def __init__(self):
 		self._socket = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
 		self._socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
@@ -27,6 +28,7 @@ class _DNSServer(_threading.Thread):
 		self._upstreamDns = (upstreamDns[0], int(upstreamDns[1]))
 		self._upstreamDnsTimeout = int(_config('upstreamDnsTimeout'))
 		self._ttl = int(_config('addressCleanupTime') / 4)
+		self._blockUndefinedDomains = _config('blockUndefinedDomains')
 		_threading.Thread.__init__(self)
 		self.daemon = True
 	def run(self):
@@ -48,23 +50,32 @@ class _DNSServer(_threading.Thread):
 								continue # TODO
 							matchingRawIp = _getRawIp(domain)
 							if matchingRawIp is not None:
-								_spawnServer(domain, _convertIp(matchingRawIp))
+								prettyIp = _convertIp(matchingRawIp)
+								_dnsInfo('DNS server got', query.getQueryType(), 'query for', domain, '- There are rules for this domain. Returning fake IP address', prettyIp)
+								_spawnServer(domain, prettyIp)
 								socket.sendto(query.buildResponsePacket(matchingRawIp, ttl=self._ttl), address)
 							# Otherwise, just don't answer
 							continue
-						# Otherwise, forward the request to the upstream DNS server
-						dnsSocket = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-						while 8:
-							tempPort = _random.randint(*_temporaryPortRange)
-							try:
-								dnsSocket.bind(('', tempPort))
-							except _socket.error:
-								continue
-							break
-						dnsSocket.sendto(data, self._upstreamDns)
-						socketMap[dnsSocket] = address # Save return address
-						socketList.append(dnsSocket) # Add to socket select() list
-						_dnsInfo('DNS server got', query.getQueryType(), 'query for', domain, '- Forwarded to upstream DNS server', self._upstreamDns, 'from local port', tempPort)
+						elif domain is not None and self._blockUndefinedDomains:
+							if query.isIPv6():
+								continue # TODO
+							matchingRawIp = _getRawIp(_DNSServer.nullroutedDomain)
+							_dnsInfo('DNS server got', query.getQueryType(), 'query for', domain, '- No rules for this domain, default policy is to block. Returning fake IP address', _convertIp(matchingRawIp))
+							socket.sendto(query.buildResponsePacket(matchingRawIp, ttl=self._ttl), address)
+						else:
+							# Otherwise, forward the request to the upstream DNS server
+							dnsSocket = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+							while 8:
+								tempPort = _random.randint(*_temporaryPortRange)
+								try:
+									dnsSocket.bind(('', tempPort))
+								except _socket.error:
+									continue
+								break
+							dnsSocket.sendto(data, self._upstreamDns)
+							socketMap[dnsSocket] = address # Save return address
+							socketList.append(dnsSocket) # Add to socket select() list
+							_dnsInfo('DNS server got', query.getQueryType(), 'query for', domain, '- Forwarded to upstream DNS server', self._upstreamDns, 'from local port', tempPort)
 					else:
 						data, source = socket.recvfrom(self._packetSize)
 						if source == self._upstreamDns: # Make sure the packet actually came from the upstream DNS server

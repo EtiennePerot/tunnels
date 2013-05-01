@@ -141,7 +141,8 @@ _defaultMainConfig = {
 	'upstreamDnsTimeout': 300,
 	'temporaryBindPortRange': u'30000-55000',
 	'iptablesChain': u'tunnels_redirects',
-	'silentLog': 'DNS'
+	'blockUndefinedDomains': False,
+	'silentLog': ''
 }
 _requiredMainConfig = ['upstreamDns']
 
@@ -220,7 +221,7 @@ def main(confDir):
 	iptablesInit()
 	from .logger import startLog, info
 	from .logger import deinit as logDeinit
-	startLog(silencedModules=commaSeparatedSplit.split(config('silentLog')))
+	startLog(silencedModules=commaSeparatedSplit.split(config('silentLog').upper()))
 	if config('overwriteResolvconf'):
 		shutil.copy2(config('resolvconfPath'), config('resolvconfBackupPath'))
 		f = open(config('resolvconfPath'), 'w')
