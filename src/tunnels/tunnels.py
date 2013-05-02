@@ -167,7 +167,7 @@ _defaultMainConfig = {
 }
 _requiredMainConfig = ['upstreamDns']
 
-def main(confDir):
+def main(configEntries):
 	global _config, _tunnelsConfig, hasPolicy, getTCPRules, getUDPRules
 	# Basic init
 	_config = {}
@@ -183,8 +183,6 @@ def main(confDir):
 	import time
 	import yaml
 	from .proxies import mkProxy
-	if not os.path.isdir(confDir):
-		raise ValueError(confDir + u' is not a valid directory.')
 	# Gather all config dictionaries
 	allConfigs = []
 	def gatherConfigs(f):
@@ -193,7 +191,10 @@ def main(confDir):
 				gatherConfigs(os.path.join(f, sub))
 		elif os.path.isfile(f):
 			allConfigs.append(yaml.load(open(f)))
-	gatherConfigs(confDir)
+	for configEntry in configEntries:
+		if not os.path.exists(configEntry):
+			raise ValueError(u'"' + configEntry + u'" does not exist.')
+		gatherConfigs(configEntry)
 	# Start populating the config structures
 	portsConfig = _PortsConfig()
 	allRules = []
@@ -214,7 +215,7 @@ def main(confDir):
 					allRules.append((ruleHosts, ruleConfig))
 			else:
 				if key in _config:
-					raise ValueError('Duplicate configuration entry for "' + key + '"')
+					raise ValueError(u'Duplicate configuration entry for "' + key + u'"')
 				_config[key] = value
 	# Expand ports
 	portsConfig.expandAll()
@@ -227,7 +228,7 @@ def main(confDir):
 		rule = _TunnelRule(ruleHosts, ruleConfig)
 		for ruleHost in _commaSeparatedSplit.split(ruleHosts):
 			if u'@' not in ruleHost:
-				raise ValueError('The rule for domain "' + ruleHost + u'" does not specify a port.')
+				raise ValueError(u'The rule for domain "' + ruleHost + u'" does not specify a port.')
 			ruleHost, rulePorts = ruleHost.split(u'@')
 			for rulePort in portsConfig.get(rulePorts):
 				_tunnelsConfig.addRule(ruleHost, rulePort, rule)
@@ -249,7 +250,7 @@ def main(confDir):
 	startLog(silencedModules=_commaSeparatedSplit.split(config('silentLog')))
 	if config('overwriteResolvconf'):
 		if not os.path.isfile(config('resolvconfPath')):
-			raise ValueError('No resolv.conf file found at "' + config('resolvconfPath') + '", but overwriteResolvconf is enabled.')
+			raise ValueError(u'No resolv.conf file found at "' + config('resolvconfPath') + u'", but overwriteResolvconf is enabled.')
 		shutil.copy2(config('resolvconfPath'), config('resolvconfBackupPath'))
 		f = open(config('resolvconfPath'), 'w')
 		f.write('nameserver ' + config('dnsBindAddress'))
