@@ -1,4 +1,5 @@
 import random as _random
+import re as _re
 import select as _select
 import socket as _socket
 import threading as _threading
@@ -22,10 +23,13 @@ class _DNSServer(_threading.Thread):
 			bindAddress = (bindAddress[0], 53)
 		self._socket.bind((bindAddress[0], int(bindAddress[1])))
 		self._packetSize = int(_config('dnsPacketSize'))
-		upstreamDns = _config('upstreamDns').split(u':')
-		if len(upstreamDns) == 1:
-			upstreamDns = (upstreamDns[0], 53)
-		self._upstreamDns = (upstreamDns[0], int(upstreamDns[1]))
+		self._upstreamDns = _re.split(u'\\s*,[,\\s]*', _config('upstreamDns'))
+		for i, dns in enumerate(self._upstreamDns):
+			dns = dns.split(u':')
+			if len(dns) == 1:
+				self._upstreamDns[i] = (dns[0], 53)
+			else:
+				self._upstreamDns[i] = (dns[0], int(dns[1]))
 		self._upstreamDnsTimeout = int(_config('upstreamDnsTimeout'))
 		self._ttl = int(_config('addressCleanupTime') / 4)
 		self._blockUndefinedDomains = _config('blockUndefinedDomains')
@@ -63,7 +67,7 @@ class _DNSServer(_threading.Thread):
 							_dnsInfo('DNS server got', query.getQueryType(), 'query for', domain, '- No rules for this domain, default policy is to block. Returning fake IP address', _convertIp(matchingRawIp))
 							socket.sendto(query.buildResponsePacket(matchingRawIp, ttl=self._ttl), address)
 						else:
-							# Otherwise, forward the request to the upstream DNS server
+							# Otherwise, forward the request to an upstream DNS server
 							dnsSocket = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
 							while 8:
 								tempPort = _random.randint(*_temporaryPortRange)
@@ -72,19 +76,20 @@ class _DNSServer(_threading.Thread):
 								except _socket.error:
 									continue
 								break
-							dnsSocket.sendto(data, self._upstreamDns)
-							socketMap[dnsSocket] = address # Save return address
+							upstreamDns = _random.choice(self._upstreamDns)
+							dnsSocket.sendto(data, upstreamDns)
+							socketMap[dnsSocket] = (upstreamDns, address) # Save upstream DNS and return address
 							socketList.append(dnsSocket) # Add to socket select() list
-							_dnsInfo('DNS server got', query.getQueryType(), 'query for', domain, '- Forwarded to upstream DNS server', self._upstreamDns, 'from local port', tempPort)
+							_dnsInfo('DNS server got', query.getQueryType(), 'query for', domain, '- Forwarded to upstream DNS server', upstreamDns, 'from local port', tempPort)
 					else:
 						data, source = socket.recvfrom(self._packetSize)
-						if source == self._upstreamDns: # Make sure the packet actually came from the upstream DNS server
-							self._socket.sendto(data, socketMap[socket]) # Send it to the client from the socket that received the query originally
+						if source == socketMap[socket][0]: # Make sure the packet actually came from the upstream DNS server
+							self._socket.sendto(data, socketMap[socket][1]) # Send it to the client from the socket that received the query originally
 							socket.close() # Close the socket to the upstream DNS server
 							socketList.remove(socket)
 							del socketMap[socket]
 						else:
-							_dnsInfo('DNS server got packet on socket', dnsSocket.getsockname(), 'but it did not come from upstream DNS server; it came from', source)
+							_dnsInfo('DNS server got packet on socket', dnsSocket.getsockname(), 'but it did not come from upstream DNS server', socketMap[socket][0],'- it came from', source)
 			elif len(socketMap): # Timeout occurred and there is at least one upstream DNS request going on
 				for socket in socketList[1:]: # Close all DNS sockets
 					socket.close()
