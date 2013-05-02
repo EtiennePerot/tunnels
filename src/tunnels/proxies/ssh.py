@@ -88,7 +88,7 @@ class SSHProxy(_MultiplexingProxy):
 		try:
 			transport.start_client()
 		except BaseException as e:
-			raise _MultiplexingProxy.Error('Could start an SSH client to', (self._proxyAddress, self._proxyPort), e)
+			raise _MultiplexingProxy.Error('Could not start an SSH client to', (self._proxyAddress, self._proxyPort), e)
 		try:
 			hostKey = transport.get_remote_server_key()
 			if not self._publicKeyCompare(hostKey, self._serverFingerprintRSA) and not self._publicKeyCompare(hostKey, self._serverFingerprintECDSA):
@@ -134,11 +134,11 @@ proxyInfo = {
 		'privateKey': {
 			'description': u'Full path to the private key file used to log in. Supports ECDSA and RSA keys only. Do not use "~" in the path.'
 		},
-		'serverFingerprintRSA': {
+		'rsaFingerprint': {
 			'default': None,
 			'description': u'Fingerprint of the server\'s RSA key. If not provided and the server presents its RSA key, the connection will be closed.'
 		},
-		'serverFingerprintECDSA': {
+		'ecdsaFingerprint': {
 			'default': None,
 			'description': u'Fingerprint of the server\'s ECDSA key. If not provided and the server presents its ECDSA key, the connection will be closed.'
 		},
