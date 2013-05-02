@@ -28,7 +28,7 @@ class ProxyThread(_threading.Thread):
 		self._incomingSocket = incomingSocket
 		self._alive = True
 		self._destinations = self._rule.getForcedAddresses()
-		_threading.Thread.__init__(self, name='Thread for ' + str(self))
+		_threading.Thread.__init__(self, name='Thread for ' + domain + ':' + str(port))
 		self.daemon = True
 	def getParentProxy(self):
 		return self._parentProxy
