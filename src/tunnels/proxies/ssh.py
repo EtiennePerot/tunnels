@@ -4,6 +4,8 @@ import threading as _threading
 import time as _time
 from tunnels.proxy import MultiplexingProxy as _MultiplexingProxy
 from tunnels.proxy import ForwarderProxyThread as _ForwarderProxyThread
+from tunnels.proxies.socksipy import socksocket as _socksocket
+from tunnels.proxies.socksipy import PROXY_TYPE_SOCKS5 as _PROXY_TYPE_SOCKS5
 import paramiko as _paramiko
 
 from tunnels.logger import mkInfoFunction as _mkInfoFunction
@@ -64,7 +66,12 @@ class SSHProxy(_MultiplexingProxy):
 		self._cipher = self['cipher']
 		self._hmac = self['hmac']
 		self._timeout = self['timeout']
-		self._monitorThread = None
+		self._parentSocks5Proxy = self['parentSocks5Proxy']
+		if self._parentSocks5Proxy is not None:
+			self._parentSocks5Proxy = self._parentSocks5Proxy.split(u':')
+			if len(self._parentSocks5Proxy) != 2:
+				raise ValueError(u'SSH parentSocks5Proxy must be in "serverName:portNumber" form.')
+			self._parentSocks5Proxy = (self._parentSocks5Proxy[0], int(self._parentSocks5Proxy[1]))
 		try:
 			self._privateKey = _paramiko.ECDSAKey.from_private_key_file(self['privateKey'])
 		except:
@@ -72,11 +79,16 @@ class SSHProxy(_MultiplexingProxy):
 				self._privateKey = _paramiko.RSAKey.from_private_key_file(self['privateKey'])
 			except:
 				raise ValueError(u'Not a valid ECDSA or RSA private key file: "' + self['privateKey'] + u'"')
+		self._monitorThread = None
 	def _getKeepalivePolicy(self):
 		return self._keepAlive
 	def _mkSocket(self):
 		_sshInfo('Connecting to SSH server', (self._proxyAddress, self._proxyPort))
-		socket = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+		if self._parentSocks5Proxy is not None:
+			socket = _socksocket(_socket.AF_INET, _socket.SOCK_STREAM)
+			socket.setproxy(_PROXY_TYPE_SOCKS5, self._parentSocks5Proxy[0], self._parentSocks5Proxy[1])
+		else:
+			socket = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
 		try:
 			socket.connect((self._proxyAddress, self._proxyPort))
 		except BaseException as e:
@@ -156,7 +168,11 @@ proxyInfo = {
 		},
 		'timeout': {
 			'default': 30,
-			'description': 'Timeout (in seconds) of control packets to check if the connection is still active.'
+			'description': u'Timeout (in seconds) of control packets to check if the connection is still active.'
+		},
+		'parentSocks5Proxy': {
+			'default': None,
+			'description': u'If specified, should be a "serverName:portNumber" string pointing to a SOCKSv5 server. The SSH connection will be established through this SOCKSv5 server. Resolution of the SSH server name will be done on the remote end of this SOCKSv5 proxy.'
 		}
 	}
 }
