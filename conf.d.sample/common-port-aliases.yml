@@ -1,0 +1,5 @@
+ports:
+        web: http + https
+        email: smtp + submission + pop3 + pop3s + imap + imap3 + imaps
+        mail: email
+        server: web + email + ssh
