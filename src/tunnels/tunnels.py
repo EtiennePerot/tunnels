@@ -2,6 +2,8 @@ import itertools as _itertools
 import re as _re
 from .confsys import Config as _Config
 from .confsys import Configurable as _Configurable
+from .parseutils import commaSeparatedSplit as _commaSeparatedSplit
+from .parseutils import plusSeparatedSplit as _plusSeparatedSplit
 
 class _TunnelsConfig(object):
 	def __init__(self):
@@ -80,8 +82,6 @@ class _TunnelsConfig(object):
 	def getUDPRules(self, domain):
 		return self._getConfigs(self._udpDomains, self._udpExtraMatches, domain)
 
-_commaSeparatedSplit = _re.compile(u'\\s*,[,\\s]*')
-
 class _TunnelRule(_Configurable):
 	_tunnelRuleConfig = {
 		'forcedAddress': None,
@@ -92,7 +92,7 @@ class _TunnelRule(_Configurable):
 		_Configurable.__init__(self, name, config, _TunnelRule._tunnelRuleConfig, _TunnelRule._tunnelRuleRequired)
 		self._forcedAddresses = None
 		if self['forcedAddress'] is not None:
-			self._forcedAddresses = _commaSeparatedSplit.split(self['forcedAddress'])
+			self._forcedAddresses = _commaSeparatedSplit(self['forcedAddress'])
 		self._proxyObject = None
 	def getForcedAddresses(self):
 		return self._forcedAddresses
@@ -102,7 +102,6 @@ class _TunnelRule(_Configurable):
 		return self._proxyObject
 
 class _PortsConfig(object):
-	_plusSeparatedSplit = _re.compile(u'\\s*\\+[+\\s]*')
 	_numericalPort = _re.compile(u'[ut]\\d+')
 	_allNumbers = _re.compile('\\d+')
 	def __init__(self):
@@ -110,10 +109,10 @@ class _PortsConfig(object):
 	def add(self, name, value):
 		if name in self._ports:
 			raise ValueError(u'Cannot define port "' + name + u'" twice.')
-		self._ports[name] = _PortsConfig._plusSeparatedSplit.split(value)
+		self._ports[name] = _plusSeparatedSplit(value)
 	def get(self, ports):
 		finalList = []
-		for port in _PortsConfig._plusSeparatedSplit.split(ports):
+		for port in _plusSeparatedSplit(ports):
 			if _PortsConfig._numericalPort.match(port):
 				finalList.append(port)
 			elif port in self._ports:
@@ -163,7 +162,8 @@ _defaultMainConfig = {
 	'temporaryBindPortRange': u'30000-55000',
 	'iptablesChain': u'tunnels_redirects',
 	'blockUndefinedDomains': False,
-	'silentLog': ''
+	'silentLog': '',
+	'randomCredentialsLength': 16
 }
 _requiredMainConfig = ['upstreamDns']
 
@@ -198,6 +198,7 @@ def main(configEntries):
 	# Start populating the config structures
 	portsConfig = _PortsConfig()
 	allRules = []
+	allProxies = []
 	for conf in allConfigs:
 		if type(conf) is not type({}):
 			continue
@@ -209,7 +210,7 @@ def main(configEntries):
 					portsConfig.add(portName, portValue)
 			elif key == u'proxies':
 				for proxyName, proxyConfig in value.items():
-					_tunnelsConfig.addProxy(proxyName, mkProxy(proxyName, proxyConfig))
+					allProxies.append((proxyName, proxyConfig))
 			elif key == u'rules':
 				for ruleHosts, ruleConfig in value.items():
 					allRules.append((ruleHosts, ruleConfig))
@@ -217,8 +218,13 @@ def main(configEntries):
 				if key in _config:
 					raise ValueError(u'Duplicate configuration entry for "' + key + u'"')
 				_config[key] = value
+	# Wrap config object
+	_config = _Configurable(u'main config', _config, _defaultMainConfig, _requiredMainConfig)
 	# Expand ports
 	portsConfig.expandAll()
+	# Create proxies
+	for proxyName, proxyConfig in allProxies:
+		_tunnelsConfig.addProxy(proxyName, mkProxy(proxyName, proxyConfig))
 	# Process rules
 	for ruleHosts, ruleConfig in allRules:
 		if type(ruleConfig) is not type({}):
@@ -226,14 +232,12 @@ def main(configEntries):
 				'proxy': ruleConfig
 			}
 		rule = _TunnelRule(ruleHosts, ruleConfig)
-		for ruleHost in _commaSeparatedSplit.split(ruleHosts):
+		for ruleHost in _commaSeparatedSplit(ruleHosts):
 			if u'@' not in ruleHost:
 				raise ValueError(u'The rule for domain "' + ruleHost + u'" does not specify a port.')
 			ruleHost, rulePorts = ruleHost.split(u'@')
 			for rulePort in portsConfig.get(rulePorts):
 				_tunnelsConfig.addRule(ruleHost, rulePort, rule)
-	# Wrap config object
-	_config = _Configurable(u'main config', _config, _defaultMainConfig, _requiredMainConfig)
 	# If we get here without an exception, then the config is probably fine. Launch the torpedoes or something.
 	from .mapper import init as mapperInit
 	from .mapper import deinit as mapperDeinit
@@ -247,7 +251,7 @@ def main(configEntries):
 	iptablesInit()
 	from .logger import startLog, info
 	from .logger import deinit as logDeinit
-	startLog(silencedModules=_commaSeparatedSplit.split(config('silentLog')))
+	startLog(silencedModules=_commaSeparatedSplit(config('silentLog')))
 	if config('overwriteResolvconf'):
 		if not os.path.isfile(config('resolvconfPath')):
 			raise ValueError(u'No resolv.conf file found at "' + config('resolvconfPath') + u'", but overwriteResolvconf is enabled.')

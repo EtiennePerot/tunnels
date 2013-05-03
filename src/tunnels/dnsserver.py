@@ -6,6 +6,9 @@ import threading as _threading
 from .dnsquery import DNSQuery as _DNSQuery
 from .mapper import getRawIp as _getRawIp
 from .mapper import convertIp as _convertIp
+from .parseutils import addressParse as _addressParse
+from .parseutils import multiAddressParse as _multiAddressParse
+from .parseutils import portRangeParse as _portRangeParse
 from .serversocket import spawn as _spawnServer
 from .tunnels import config as _config
 from .tunnels import hasPolicy as _hasPolicy
@@ -14,22 +17,13 @@ from .logger import mkInfoFunction as _mkInfoFunction
 _dnsInfo = _mkInfoFunction('DNS')
 
 class _DNSServer(_threading.Thread):
-	nullroutedDomain = u'tunnels.nullroute.null'
+	nullroutedDomain = u'tunnels:null'
 	def __init__(self):
 		self._socket = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
 		self._socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
-		bindAddress = _config('dnsBindAddress').split(u':')
-		if len(bindAddress) == 1:
-			bindAddress = (bindAddress[0], 53)
-		self._socket.bind((bindAddress[0], int(bindAddress[1])))
+		self._socket.bind(_addressParse(_config('dnsBindAddress'), defaultPort=53, asTuple=True))
 		self._packetSize = int(_config('dnsPacketSize'))
-		self._upstreamDns = _re.split(u'\\s*,[,\\s]*', _config('upstreamDns'))
-		for i, dns in enumerate(self._upstreamDns):
-			dns = dns.split(u':')
-			if len(dns) == 1:
-				self._upstreamDns[i] = (dns[0], 53)
-			else:
-				self._upstreamDns[i] = (dns[0], int(dns[1]))
+		self._upstreamDns = _multiAddressParse(_config('upstreamDns'), defaultPort=53, asTuple=True)
 		self._upstreamDnsTimeout = int(_config('upstreamDnsTimeout'))
 		self._ttl = int(_config('addressCleanupTime') / 4)
 		self._blockUndefinedDomains = _config('blockUndefinedDomains')
@@ -101,4 +95,4 @@ _temporaryPortRange = None
 def init():
 	global _temporaryPortRange
 	_DNSServer().start()
-	_temporaryPortRange = tuple(map(int, _config('temporaryBindPortRange').split(u'-')))
+	_temporaryPortRange = _portRangeParse(_config('temporaryBindPortRange'))

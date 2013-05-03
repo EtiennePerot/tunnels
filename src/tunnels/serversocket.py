@@ -5,6 +5,7 @@ from .iptables import addRedirect as _addRedirect
 from .iptables import removeRedirect as _removeRedirect
 from .mapper import hasSocketThread as _hasSocketThread
 from .mapper import registerSocketThread as _registerSocketThread
+from .parseutils import portRangeParse as _portRangeParse
 from .tunnels import config as _config
 from .tunnels import getTCPRules as _getTCPRules
 from .tunnels import getUDPRules as _getUDPRules
@@ -99,4 +100,4 @@ _temporaryPortRange = None
 
 def init():
 	global _temporaryPortRange
-	_temporaryPortRange = tuple(map(int, _config('temporaryBindPortRange').split(u'-')))
+	_temporaryPortRange = _portRangeParse(_config('temporaryBindPortRange'))
