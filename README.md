@@ -98,7 +98,7 @@ Currently, `tunnels` supports 3 types of proxy:
     * `privateKey`: Full path to your SSH private key used to log in to the server. Make sure to include the full path. `~` will not point to where you might expect, because `tunnels` runs as root. The key may either be an RSA key or an ECDSA key (if your [Paramiko] library supports it).
     * `rsaFingerprint`: Fingerprint of the server's RSA key. If not provided and the server presents its RSA key, the connection will be closed.
     * `ecdsaFingerprint`: Fingerprint of the server's ECDSA key. Only useful if your [Paramiko] library supports ECDSA. If not provided and the server presents its ECDSA key, the connection will be closed.
-    * parentSocks5Proxy`: If specified, should be a `serverName:portNumber` string pointing to a SOCKSv5 server. The SSH connection will be established through this SOCKSv5 server. Resolution of the SSH server name will be done on the remote end of this SOCKSv5 proxy.
+    * `parentSocks5Proxy`: If specified, should be a `serverName:portNumber` string pointing to a SOCKSv5 server. The SSH connection will be established through this SOCKSv5 server. Resolution of the SSH server name will be done on the remote end of this SOCKSv5 proxy.
 
 ### `ports` section
 
