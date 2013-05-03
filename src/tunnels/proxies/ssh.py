@@ -2,6 +2,7 @@ import os as _os
 import socket as _socket
 import threading as _threading
 import time as _time
+from tunnels.parseutils import addressParse as _addressParse
 from tunnels.proxy import MultiplexingProxy as _MultiplexingProxy
 from tunnels.proxy import ForwarderProxyThread as _ForwarderProxyThread
 from tunnels.proxies.socksipy import socksocket as _socksocket
@@ -68,10 +69,7 @@ class SSHProxy(_MultiplexingProxy):
 		self._timeout = self['timeout']
 		self._parentSocks5Proxy = self['parentSocks5Proxy']
 		if self._parentSocks5Proxy is not None:
-			self._parentSocks5Proxy = self._parentSocks5Proxy.split(u':')
-			if len(self._parentSocks5Proxy) != 2:
-				raise ValueError(u'SSH parentSocks5Proxy must be in "serverName:portNumber" form.')
-			self._parentSocks5Proxy = (self._parentSocks5Proxy[0], int(self._parentSocks5Proxy[1]))
+			self._parentSocks5Proxy = _addressParse(self._parentSocks5Proxy, defaultPort=1080)
 		try:
 			self._privateKey = _paramiko.ECDSAKey.from_private_key_file(self['privateKey'])
 		except:
@@ -83,15 +81,18 @@ class SSHProxy(_MultiplexingProxy):
 	def _getKeepalivePolicy(self):
 		return self._keepAlive
 	def _mkSocket(self):
-		_sshInfo('Connecting to SSH server', (self._proxyAddress, self._proxyPort))
 		if self._parentSocks5Proxy is not None:
+			_sshInfo('Connecting to SSH server', (self._proxyAddress, self._proxyPort), 'over SOCKSv5 proxy', self['parentSocks5Proxy'])
 			socket = _socksocket(_socket.AF_INET, _socket.SOCK_STREAM)
-			socket.setproxy(_PROXY_TYPE_SOCKS5, self._parentSocks5Proxy[0], self._parentSocks5Proxy[1])
+			socket.setproxy(_PROXY_TYPE_SOCKS5, self._parentSocks5Proxy['address'], self._parentSocks5Proxy['port'], username=self._parentSocks5Proxy['username'], password=self._parentSocks5Proxy['password'])
 		else:
+			_sshInfo('Connecting to SSH server', (self._proxyAddress, self._proxyPort))
 			socket = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
 		try:
 			socket.connect((self._proxyAddress, self._proxyPort))
 		except BaseException as e:
+			if self._parentSocks5Proxy is not None:
+				raise _MultiplexingProxy.Error('Could not connect to', (self._proxyAddress, self._proxyPort), 'over SOCKSv5 proxy', self['parentSocks5Proxy'], e)
 			raise _MultiplexingProxy.Error('Could not connect to', (self._proxyAddress, self._proxyPort), e)
 		transport = _paramiko.Transport(socket)
 		transport.set_keepalive(self._timeout / 4)
@@ -172,7 +173,7 @@ proxyInfo = {
 		},
 		'parentSocks5Proxy': {
 			'default': None,
-			'description': u'If specified, should be a "serverName:portNumber" string pointing to a SOCKSv5 server. The SSH connection will be established through this SOCKSv5 server. Resolution of the SSH server name will be done on the remote end of this SOCKSv5 proxy.'
+			'description': u'If specified, should be a "[username:password@]serverName:portNumber" string pointing to a SOCKSv5 server. The SSH connection will be established through this SOCKSv5 server. Resolution of the SSH server name will be done on the remote end of this SOCKSv5 proxy.'
 		}
 	}
 }

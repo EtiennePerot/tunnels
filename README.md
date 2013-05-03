@@ -89,10 +89,7 @@ Each entry in the `proxies` section is the name of a proxy. Each entry contains 
 Currently, `tunnels` supports 3 types of proxy:
 
 * `socks5`: A SOCKSv5 server. UDP support is currently not implemented, thus this is mostly equivalent to SOCKSv4a right now. Regardless, this proxy type allows you to connect to a SOCKSv5 proxy at some arbitrary address. Configuration options:
-    * `address`: The domain name or IP address of the SOCKSv5 server. If you use a domain name, make sure your configuration allows you to resolve it once `tunnels` is running!
-    * `port`: The number of the TCP port the SOCKSv5 server is listening on. Default: `1080`
-    * `username`: *Not implemented*
-    * `password`: *Not implemented*
+    * `address`: The address of the SOCKSv5 server, in `[username:password@]serverName:portNumber` form. If you use a domain name, make sure your configuration allows you to resolve it once `tunnels` is running!
 * `http`: An HTTP proxy server (not HTTPS!). Only supports TCP proxying because that's how HTTP proxies work. The configuration options are the same as `socks5`, except the default port number is `80`.
 * `ssh`: An SSH tunnel. Only supports TCP, but could be expanded to transport UDP packets over the TCP link (patches welcome), but this would be pretty slow. Configuration options:
     * `address`: The domain name or IP address of the SSH server. SSH aliases will not work. If you use a domain name, make sure your configuration allows you to resolve it once `tunnels` is running!
@@ -101,6 +98,7 @@ Currently, `tunnels` supports 3 types of proxy:
     * `privateKey`: Full path to your SSH private key used to log in to the server. Make sure to include the full path. `~` will not point to where you might expect, because `tunnels` runs as root. The key may either be an RSA key or an ECDSA key (if your [Paramiko] library supports it).
     * `rsaFingerprint`: Fingerprint of the server's RSA key. If not provided and the server presents its RSA key, the connection will be closed.
     * `ecdsaFingerprint`: Fingerprint of the server's ECDSA key. Only useful if your [Paramiko] library supports ECDSA. If not provided and the server presents its ECDSA key, the connection will be closed.
+    * parentSocks5Proxy`: If specified, should be a `serverName:portNumber` string pointing to a SOCKSv5 server. The SSH connection will be established through this SOCKSv5 server. Resolution of the SSH server name will be done on the remote end of this SOCKSv5 proxy.
 
 ### `ports` section
 
@@ -151,12 +149,13 @@ The following options must be specified at the root level of configuration files
 * `overwriteResolvconf`: Whether to overwrite the system's `resolv.conf` file on startup and point it to `dnsBindAddress`. The default is `true`. Your old `resolv.conf` file will be backed up.
 * `restoreResolvConf`: Whether to restore the system's `resolv.conf` file from backup on exit. The default is `true`. This only makes sense if `overwriteResolvconf` is true as well.
 * `makeResolvconfImmutable`: Whether to run `chattr +i /path/to/resolv.conf` after having overwritten it. The default is `true`. This only makes sense if `overwriteResolvconf` is true as well.
-* `resolvconfPath`: The path to your system's `resolv.conf` file. The default is `/etc/resolv.conf`.
+* `resolvconfPath`: The path to your system's `resolv.conf` file. The default is `/etc/resolv.conf`. This only matters if `overwriteResolvconf` is true.
 * `resolvconfBackupPath`: The path to store the backup for the old `resolv.conf` file. The default is `/etc/resolv.conf.tunnels-backup`. This only matters if `overwriteResolvconf` is true.
 * `dnsPacketSize`: How large can a single DNS packet be. The default is `65535`. You should never need to change this.
 * `upstreamDnsTimeout`: How long to wait for a reply from an upstream DNS server after having sent a query. The default is `300` (seconds).
 * `temporaryBindPortRange`: A port range which `tunnels` may use to bind its temporary sockets to. `iptables` rules are used to redirect connections to these ports. The default is `30000-55000`. Note that you can still use any port in this range for some other purposes; `tunnels` will jsut keep trying random ports in this range until it succeeds. A larger range means more concurrent connections.
 * `iptablesChain`: The name of the `iptables` chain to store all redirection rules into. The default is `tunnels_redirects`. You should never need to change this unless you have a really weird `iptables` setup.
+* `randomCredentialsLength`: Size of randomly-generated credentials (username/password). Addresses of the type `username:password@address:portNumber` can have the `username` and/or `password` be set to `$RANDOM`, and will be replaced with a random string of this length.
 
 [SSH]: https://en.wikipedia.org/wiki/Secure_Shell
 [Squid]: http://www.squid-cache.org/
