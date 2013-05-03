@@ -1,0 +1,4 @@
+PyYAML==3.10
+-e svn+https://socksipy-branch.googlecode.com/svn/trunk@19#egg=SocksiPy_branch-1.02-py2.7-dev_r19
+paramiko==1.10.1
+pycrypto==2.6

@@ -2,8 +2,8 @@ import socket as _socket
 from tunnels.parseutils import addressParse as _addressParse
 from tunnels.proxy import Proxy as _Proxy
 from tunnels.proxy import ForwarderProxyThread as _ForwarderProxyThread
-from tunnels.socksipy import socksocket as _socksocket
-from tunnels.socksipy import PROXY_TYPE_SOCKS5 as _PROXY_TYPE_SOCKS5
+from socks import socksocket as _socksocket
+from socks import PROXY_TYPE_SOCKS5 as _PROXY_TYPE_SOCKS5
 
 class Socks5TCPProxyThread(_ForwarderProxyThread):
 	def _mkOutgoingSocket(self):

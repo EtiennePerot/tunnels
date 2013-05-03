@@ -1,8 +1,8 @@
 import socket as _socket
 from tunnels.proxy import Proxy as _Proxy
 from tunnels.proxy import ForwarderProxyThread as _ForwarderProxyThread
-from tunnels.socksipy import socksocket as _socksocket
-from tunnels.socksipy import PROXY_TYPE_HTTP as _PROXY_TYPE_HTTP
+from socks import socksocket as _socksocket
+from socks import PROXY_TYPE_HTTP as _PROXY_TYPE_HTTP
 
 class HTTPTCPProxyThread(_ForwarderProxyThread):
 	def _mkOutgoingSocket(self):

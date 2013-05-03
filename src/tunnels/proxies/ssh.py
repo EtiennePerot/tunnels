@@ -5,8 +5,8 @@ import time as _time
 from tunnels.parseutils import addressParse as _addressParse
 from tunnels.proxy import MultiplexingProxy as _MultiplexingProxy
 from tunnels.proxy import ForwarderProxyThread as _ForwarderProxyThread
-from tunnels.socksipy import socksocket as _socksocket
-from tunnels.socksipy import PROXY_TYPE_SOCKS5 as _PROXY_TYPE_SOCKS5
+from socks import socksocket as _socksocket
+from socks import PROXY_TYPE_SOCKS5 as _PROXY_TYPE_SOCKS5
 import paramiko as _paramiko
 
 from tunnels.logger import mkInfoFunction as _mkInfoFunction
