@@ -12,8 +12,12 @@ scriptDir="$(dirname "$(readlink -e "$BASH_SOURCE")")"
 if [ -f "$scriptDir/bin/activate" ]; then # If virtualenv exists
 	source "$scriptDir/bin/activate"
 fi
+python=python2
+if ! which python2 &> /dev/null; then
+	python=python # And hope for the best
+fi
 export PYTHONPATH="$scriptDir/src:$PYTHONPATH"
 if [ "$(basename "$0")" == 'tunnelsd' ]; then
-	exec python -m tunnels --daemon "$@"
+	exec "$python" -m tunnels --daemon "$@"
 fi
-exec python -OO -B -m tunnels "$@"
+exec "$python" -OO -B -m tunnels "$@"
