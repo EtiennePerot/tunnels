@@ -45,4 +45,4 @@ for portAlias in sorted(set(tcpPorts.keys()) | set(udpPorts.keys())):
 		ports.extend(('t' + str(tcpPort) for tcpPort in sorted(tcpPorts[portAlias])))
 	if portAlias in udpPorts:
 		ports.extend(('u' + str(udpPort) for udpPort in sorted(udpPorts[portAlias])))
-	print('\t' + portAlias + ': ' + ', '.join(ports))
+	print('        ' + portAlias + ': ' + ', '.join(ports))
