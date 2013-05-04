@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-scriptDir="$(dirname "$BASH_SOURCE")"
-
 if [ "$UID" -ne 0 ]; then
 	if which sudo &> /dev/null; then
 		exec sudo "$0" "$@"
@@ -10,5 +8,10 @@ if [ "$UID" -ne 0 ]; then
 	exit 1
 fi
 
+scriptDir="$(dirname "$(readlink -e "$BASH_SOURCE")")"
+source "$scriptDir/bin/activate"
 export PYTHONPATH="$scriptDir/src:$PYTHONPATH"
-exec python2 -m tunnels "$@"
+if [ "$(basename "$0")" == 'tunnelsd' ]; then
+	exec python -m tunnels --daemon "$@"
+fi
+exec python -m tunnels "$@"

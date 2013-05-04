@@ -90,9 +90,13 @@ class _DNSServer(_threading.Thread):
 				socketList = [socketList[0]] # Reset socket list
 				socketMap = {} # Reset socket map
 
+_dnsServer = None
 _temporaryPortRange = None
 
 def init():
-	global _temporaryPortRange
-	_DNSServer().start()
+	global _dnsServer, _temporaryPortRange
+	_dnsServer = _DNSServer()
 	_temporaryPortRange = _portRangeParse(_config('temporaryBindPortRange'))
+
+def run():
+	_dnsServer.start()

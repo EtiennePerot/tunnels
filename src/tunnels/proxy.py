@@ -158,13 +158,6 @@ class MultiplexingProxy(Proxy):
 		self._lock = _threading.RLock()
 		self._socket = None
 		self._activeCount = 0
-	def onRegister(self):
-		Proxy.onRegister(self)
-		with self._lock:
-			if self._getKeepalivePolicy(): # Connect right away
-				self._socket = self._mkSocket()
-				if self._socket is None:
-					raise SystemError('Could not establish connection.')
 	def _getKeepalivePolicy(self): # Overriddable
 		raise NotImplementedError()
 	def _mkSocket(self): # Overriddable

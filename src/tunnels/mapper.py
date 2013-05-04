@@ -22,7 +22,6 @@ class _Mapper(_threading.Thread):
 		self._localRoute.enable()
 		_threading.Thread.__init__(self, name='Tunnels mapper cleanup thread')
 		self.daemon = True
-		self.start()
 	def getRawIp(self, domain):
 		with self._lock:
 			self._lastAccessTime[domain] = _time.time()
@@ -82,6 +81,9 @@ def init():
 	getDomain = _mapper.getDomain
 	registerSocketThread = _mapper.registerSocketThread
 	hasSocketThread = _mapper.hasSocketThread
+
+def run():
+	_mapper.start()
 
 def deinit():
 	_mapper.kill()

@@ -1,9 +1,19 @@
 import itertools as _itertools
+import os as _os
 import re as _re
+import shutil as _shutil
+import subprocess as _subprocess
+import threading as _threading
+import time as _time
+import yaml as _yaml
+
 from .confsys import Config as _Config
 from .confsys import Configurable as _Configurable
 from .parseutils import commaSeparatedSplit as _commaSeparatedSplit
 from .parseutils import plusSeparatedSplit as _plusSeparatedSplit
+
+from .logger import mkInfoFunction as _mkInfoFunction
+_info = _mkInfoFunction('Main')
 
 class _TunnelsConfig(object):
 	def __init__(self):
@@ -138,6 +148,7 @@ class _PortsConfig(object):
 						newList.extend(self._ports[port])
 				self._ports[portName] = newList
 
+_terminationEvent = None
 _tunnelsConfig = None
 hasPolicy = lambda *args: None
 getTCPRules = lambda *args: None
@@ -167,8 +178,8 @@ _defaultMainConfig = {
 }
 _requiredMainConfig = ['upstreamDns']
 
-def main(configEntries):
-	global _config, _tunnelsConfig, hasPolicy, getTCPRules, getUDPRules
+def init(configEntries):
+	global _terminationEvent, _config, _tunnelsConfig, hasPolicy, getTCPRules, getUDPRules
 	# Basic init
 	_config = {}
 	_tunnelsConfig = _TunnelsConfig()
@@ -176,23 +187,17 @@ def main(configEntries):
 	getTCPRules = _tunnelsConfig.getTCPRules
 	getUDPRules = _tunnelsConfig.getUDPRules
 	# Take care of the config
-	import os
-	import shutil
-	import subprocess
-	import sys
-	import time
-	import yaml
 	from .proxies import mkProxy
 	# Gather all config dictionaries
 	allConfigs = []
 	def gatherConfigs(f):
-		if os.path.isdir(f):
-			for sub in os.listdir(f):
-				gatherConfigs(os.path.join(f, sub))
-		elif os.path.isfile(f):
-			allConfigs.append(yaml.load(open(f)))
+		if _os.path.isdir(f):
+			for sub in _os.listdir(f):
+				gatherConfigs(_os.path.join(f, sub))
+		elif _os.path.isfile(f):
+			allConfigs.append(_yaml.load(open(f)))
 	for configEntry in configEntries:
-		if not os.path.exists(configEntry):
+		if not _os.path.exists(configEntry):
 			raise ValueError(u'"' + configEntry + u'" does not exist.')
 		gatherConfigs(configEntry)
 	# Start populating the config structures
@@ -239,48 +244,68 @@ def main(configEntries):
 			for rulePort in portsConfig.get(rulePorts):
 				_tunnelsConfig.addRule(ruleHost, rulePort, rule)
 	# If we get here without an exception, then the config is probably fine. Launch the torpedoes or something.
+	from .logger import startLog, stopLog
+	startLog(silencedModules=_commaSeparatedSplit(config('silentLog')))
 	from .mapper import init as mapperInit
-	from .mapper import deinit as mapperDeinit
 	mapperInit()
 	from .dnsserver import init as dnsServerInit
 	dnsServerInit()
 	from .serversocket import init as serversocketInit
 	serversocketInit()
 	from .iptables import init as iptablesInit
-	from .iptables import deinit as iptablesDeinit
 	iptablesInit()
-	from .logger import startLog, info
-	from .logger import deinit as logDeinit
-	startLog(silencedModules=_commaSeparatedSplit(config('silentLog')))
 	if config('overwriteResolvconf'):
-		if not os.path.isfile(config('resolvconfPath')):
+		if not _os.path.isfile(config('resolvconfPath')):
 			raise ValueError(u'No resolv.conf file found at "' + config('resolvconfPath') + u'", but overwriteResolvconf is enabled.')
-		shutil.copy2(config('resolvconfPath'), config('resolvconfBackupPath'))
+		_shutil.copy2(config('resolvconfPath'), config('resolvconfBackupPath'))
 		f = open(config('resolvconfPath'), 'w')
 		f.write('nameserver ' + config('dnsBindAddress'))
 		f.close()
-		info(u'Your resolv.conf file', config('resolvconfPath'), u'has been modified to point to Tunnels.')
+		_info(u'Your resolv.conf file', config('resolvconfPath'), u'has been modified to point to Tunnels.')
 		if config('makeResolvconfImmutable'):
-			subprocess.check_output(['chattr', '+i', config('resolvconfPath')])
-			info(u'It has also been made immutable (chattr +i).')
+			_subprocess.check_output(['chattr', '+i', config('resolvconfPath')])
+			_info(u'It has also been made immutable (chattr +i).')
 		if config('restoreResolvConf'):
-			info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'and will be restored on exit.')
+			_info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'and will be restored on exit.')
 		else:
-			info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'but will NOT be restored on exit.')
-	info(u'Tunnels operational.')
-	info(u'Make sure to point your DNS settings to it.')
-	info(u'Remember that data lingering in the DNS cache may make some domains not go through Tunnels until the TTL expires.')
+			_info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'but will NOT be restored on exit.')
+	_terminationEvent = _threading.Event()
+	_info(u'Tunnels setup work done; ready to start.')
+	stopLog()
+
+def run():
+	from .logger import startLog, flushLog
+	startLog(None)
+	from .mapper import run as mapperRun
+	mapperRun()
+	from .dnsserver import run as dnsServerRun
+	dnsServerRun()
+	_info(u'Tunnels operational.')
+	_info(u'Make sure to point your DNS settings to it.')
+	_info(u'Remember that data lingering in the DNS cache may make some domains not go through Tunnels until the TTL expires.')
 	try:
-		while 8:
-			time.sleep(3600)
+		while not _terminationEvent.is_set():
+			_terminationEvent.wait(3600)
 	except KeyboardInterrupt:
 		print('\rInterrupted, shutting down.')
+	flushLog()
+
+def terminate():
+	from .logger import flushLog
+	from .mapper import deinit as mapperDeinit
+	from .iptables import deinit as iptablesDeinit
 	mapperDeinit()
 	iptablesDeinit()
 	if config('overwriteResolvconf') and config('restoreResolvConf'):
 		if config('makeResolvconfImmutable'):
-			subprocess.check_output(['chattr', '-i', config('resolvconfPath')])
-		shutil.copy2(config('resolvconfBackupPath'), config('resolvconfPath'))
-		os.remove(config('resolvconfBackupPath'))
-		info(u'Your resolv.conf file', config('resolvconfPath'), u'has been restored from the backup at', config('resolvconfBackupPath'))
-	logDeinit()
+			_subprocess.check_output(['chattr', '-i', config('resolvconfPath')])
+		_shutil.copy2(config('resolvconfBackupPath'), config('resolvconfPath'))
+		_os.remove(config('resolvconfBackupPath'))
+		_info(u'Your resolv.conf file', config('resolvconfPath'), u'has been restored from the backup at', config('resolvconfBackupPath'))
+	flushLog(thisThread=True)
+	_terminationEvent.set()
+
+def main(configEntries):
+	init(configEntries)
+	run()
+	terminate()
