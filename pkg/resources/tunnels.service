@@ -1,0 +1,14 @@
+[Unit]
+Description=Tunnels
+Before=NetworkManager.service dhcpcd.service dhcpcd@.service netcfg.service netcfg@.service wicd.service
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/tunnelsd
+PIDFile=/var/run/tunnels.pid
+KillMode=process
+KillSignal=SIGTERM
+TimeoutSec=30
+
+[Install]
+WantedBy=network.target

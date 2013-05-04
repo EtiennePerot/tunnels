@@ -19,6 +19,16 @@ def _daemonMode():
 	context = DaemonContext()
 	context.stdout = sys.stdout
 	context.stderr = sys.stderr
+	context.detach_process = True
+	try:
+		import daemon.pidfile as pidfile
+	except ImportError:
+		import daemon.pidlockfile as pidfile
+	pidFile = u'/var/run/tunnels.pid'
+	if u'--pid' in sys.argv:
+		pidFile = sys.argv[sys.argv.index(u'--pid') + 1]
+		sys.argv = sys.argv[:sys.argv.index(u'--pid')] + sys.argv[sys.argv.index(u'--pid') + 2:]
+	context.pidfile = pidfile.TimeoutPIDLockFile(pidFile, acquire_timeout=30)
 	if len(sys.argv) < 2:
 		sys.argv.append(u'/etc/tunnels.d')
 	info('Initializing.')
