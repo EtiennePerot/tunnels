@@ -257,7 +257,13 @@ def init(configEntries):
 	if config('overwriteResolvconf'):
 		if not _os.path.isfile(config('resolvconfPath')):
 			raise ValueError(u'No resolv.conf file found at "' + config('resolvconfPath') + u'", but overwriteResolvconf is enabled.')
-		_shutil.copy2(config('resolvconfPath'), config('resolvconfBackupPath'))
+		if _os.path.isfile(config('resolvconfBackupPath')):
+			wasBackedUp = False
+			_info(u'A backup file of the resolv.conf file was found at', config('resolvconfBackupPath'), u'- Not backing up current copy of resolv.conf')
+		else:
+			wasBackedUp = True
+			_shutil.copy2(config('resolvconfPath'), config('resolvconfBackupPath'))
+		_subprocess.check_output(['chattr', '-i', config('resolvconfPath')])
 		f = open(config('resolvconfPath'), 'w')
 		f.write('nameserver ' + config('dnsBindAddress'))
 		f.close()
@@ -265,10 +271,13 @@ def init(configEntries):
 		if config('makeResolvconfImmutable'):
 			_subprocess.check_output(['chattr', '+i', config('resolvconfPath')])
 			_info(u'It has also been made immutable (chattr +i).')
-		if config('restoreResolvConf'):
-			_info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'and will be restored on exit.')
-		else:
-			_info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'but will NOT be restored on exit.')
+		if wasBackedUp:
+			if config('restoreResolvConf'):
+				_info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'and will be restored on exit.')
+			else:
+				_info(u'The old file has been backed up to', config('resolvconfBackupPath'), u'but will NOT be restored on exit.')
+		elif config('restoreResolvConf'):
+			_info(u'The backup present earlier at', config('resolvconfBackupPath'), u'will be restored on exit.')
 	_terminationEvent = _threading.Event()
 	_info(u'Tunnels setup work done; ready to start.')
 	stopLog()

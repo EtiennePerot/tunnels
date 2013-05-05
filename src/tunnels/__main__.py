@@ -4,6 +4,7 @@ def _interactiveMode():
 	main(sys.argv[1:])
 
 def _daemonMode():
+	import os
 	import sys
 	from .tunnels import init
 	from .tunnels import run
@@ -28,7 +29,15 @@ def _daemonMode():
 	if u'--pid' in sys.argv:
 		pidFile = sys.argv[sys.argv.index(u'--pid') + 1]
 		sys.argv = sys.argv[:sys.argv.index(u'--pid')] + sys.argv[sys.argv.index(u'--pid') + 2:]
-	context.pidfile = pidfile.TimeoutPIDLockFile(pidFile, acquire_timeout=30)
+	pidLock = pidfile.TimeoutPIDLockFile(pidFile, acquire_timeout=15)
+	if os.path.isfile(pidFile):
+		currentPid = open(pidFile).read(-1).strip()
+		if os.path.exists(u'/proc/' + currentPid):
+			info('tunnels already running on PID', currentPid)
+			sys.exit(1)
+		# Otherwise, we are free to break the lock
+		pidLock.break_lock()
+	context.pidfile = pidLock
 	if len(sys.argv) < 2:
 		sys.argv.append(u'/etc/tunnels.d')
 	info('Initializing.')
