@@ -289,8 +289,7 @@ def run():
 	mapperRun()
 	from .dnsserver import run as dnsServerRun
 	dnsServerRun()
-	_info(u'Tunnels operational.')
-	_info(u'Make sure to point your DNS settings to it.')
+	_info(u'Tunnels operational. Make sure to point your DNS settings to it.')
 	_info(u'Remember that data lingering in the DNS cache may make some domains not go through Tunnels until the TTL expires.')
 	try:
 		while not _terminationEvent.is_set():

@@ -4,7 +4,7 @@ class Config(object):
 			providedConfig = {}
 		for key in requiredKeys:
 			if key not in providedConfig:
-				raise ValueError('Must provide a value for', context, '->', key)
+				raise ValueError(u'Must provide a value for', context, u'->', key)
 		self._provided = providedConfig
 		self._default = defaultConfig
 		for key in self._default.keys():
