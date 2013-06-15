@@ -3,6 +3,7 @@ import re as _re
 import select as _select
 import socket as _socket
 import threading as _threading
+import time as _time
 from .dnsquery import DNSQuery as _DNSQuery
 from .mapper import getRawIp as _getRawIp
 from .mapper import convertIp as _convertIp
@@ -35,8 +36,11 @@ class _DNSServer(_threading.Thread):
 		exceptionList = []
 		socketList = [self._socket]
 		socketMap = {}
+		lastSweep = _time.time()
+		sweepDelete = []
 		while 8:
 			readList, writeList, exceptionList = _select.select(socketList, [], [], self._upstreamDnsTimeout)
+			now = _time.time()
 			if len(readList):
 				for socket in readList:
 					if socket is self._socket:
@@ -72,7 +76,7 @@ class _DNSServer(_threading.Thread):
 								break
 							upstreamDns = _random.choice(self._upstreamDns)
 							dnsSocket.sendto(data, upstreamDns)
-							socketMap[dnsSocket] = (upstreamDns, address) # Save upstream DNS and return address
+							socketMap[dnsSocket] = (upstreamDns, address, now + self._upstreamDnsTimeout) # Save upstream DNS and return address and timeout time
 							socketList.append(dnsSocket) # Add to socket select() list
 							_dnsInfo('DNS server got', query.getQueryType(), 'query for', domain, '- Forwarded to upstream DNS server', upstreamDns, 'from local port', tempPort)
 					else:
@@ -84,11 +88,15 @@ class _DNSServer(_threading.Thread):
 							del socketMap[socket]
 						else:
 							_dnsInfo('DNS server got packet on socket', dnsSocket.getsockname(), 'but it did not come from upstream DNS server', socketMap[socket][0],'- it came from', source)
-			elif len(socketMap): # Timeout occurred and there is at least one upstream DNS request going on
-				for socket in socketList[1:]: # Close all DNS sockets
+			if len(socketMap) and now > lastSweep + self._upstreamDnsTimeout: # Do occasional sweep of timeout'd sockets
+				sweepDelete = []
+				for dnsSocket in socketMap:
+					if now > socketMap[dnsSocket][2]:
+						sweepDelete.append(dnsSocket)
+				for socket in sweepDelete:
 					socket.close()
-				socketList = [socketList[0]] # Reset socket list
-				socketMap = {} # Reset socket map
+					socketList.remove(socket)
+					del socketMap[socket]
 
 _dnsServer = None
 _temporaryPortRange = None
